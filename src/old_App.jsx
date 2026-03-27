@@ -1,13 +1,25 @@
 import { useState, useEffect } from "react";
-import { supabase } from "./supabase.js";
 
-// ─── CONSTANTS ────────────────────────────────────────────────────────────
+// ─── CONFIG ────────────────────────────────────────────────────────────────
+const ADMIN_PASSWORD = "Gr4ntTutu*"; // Change this!
+const SCHOOL_CODES = { "DANCE2024": "Starlight Dance Academy", "STUDIO01": "The Dance Studio", "GRACE123": "Grace Dance School" };
 const DANCE_STYLES = ["Ballet", "Jazz", "Tap", "Contemporary", "Hip Hop", "Musical Theatre", "Acro", "Irish", "Ballroom", "Lyrical"];
 const SIZES = ["Age 2-3","Age 3-4","Age 4-5","Age 5-6","Age 6-7","Age 7-8","Age 8-9","Age 9-10","Age 10-11","Age 11-12","Teen XS","Teen S","Teen M","Teen L","Adult XS","Adult S","Adult M","Adult L","Adult XL"];
 const CONDITIONS = ["New with tags", "Excellent", "Good", "Well loved"];
 const styleEmoji = { Ballet:"🩰", Jazz:"✨", Tap:"🎩", Contemporary:"🌊", "Hip Hop":"🎤", "Musical Theatre":"🎭", Acro:"🤸", Irish:"☘️", Ballroom:"💃", Lyrical:"🕊️" };
 const conditionKey = { "New with tags":"new", "Excellent":"excellent", "Good":"good", "Well loved":"worn" };
-const ADMIN_EMAIL = "grant.chaplin@hotmail.com";
+
+const SAMPLE_LISTINGS = [
+  { id:1, title:"Swan Lake Ballet Tutu", style:"Ballet", size:"Age 7-8", condition:"Excellent", price:35, description:"Beautiful white tutu with silver trim. Only worn twice for performance.", seller:"Sarah M.", school:"Starlight Dance Academy", schoolCode:"DANCE2024", paypalEmail:"sarah@example.com", image:null, createdAt:Date.now()-86400000*2 },
+  { id:2, title:"Jazz Costume – Purple Sequin", style:"Jazz", size:"Age 10-11", condition:"Good", price:28, description:"Stunning purple sequin jazz costume. Some minor wear but looks great on stage.", seller:"Emma T.", school:"Starlight Dance Academy", schoolCode:"DANCE2024", paypalEmail:"emma@example.com", image:null, createdAt:Date.now()-86400000 },
+  { id:3, title:"Tap Shoes – Black Patent", style:"Tap", size:"Teen S", condition:"New with tags", price:45, description:"Never worn. Received as gift but wrong size.", seller:"Lisa K.", school:"The Dance Studio", schoolCode:"STUDIO01", paypalEmail:"lisa@example.com", image:null, createdAt:Date.now()-3600000*5 },
+  { id:4, title:"Contemporary Lyrical Dress", style:"Contemporary", size:"Age 9-10", condition:"Excellent", price:22, description:"Flowing chiffon dress in dusty rose. Perfect for lyrical or contemporary.", seller:"Mia R.", school:"Starlight Dance Academy", schoolCode:"DANCE2024", paypalEmail:"mia@example.com", image:null, createdAt:Date.now()-3600000*2 },
+];
+
+const SAMPLE_ADS = [
+  { id:1, title:"Freed of London", tagline:"Professional dancewear & pointe shoes", url:"https://freed.co.uk", image:null, active:true, slot:"top" },
+  { id:2, title:"Bloch Dance", tagline:"The world's favourite dance brand", url:"https://bloch.com", image:null, active:true, slot:"sidebar" },
+];
 
 const P = {
   bg:"#0d0a14", surface:"#16111f", card:"#1e1729", border:"#2e2340",
@@ -25,7 +37,7 @@ const css = `
   .logo-icon{width:34px;height:34px;background:linear-gradient(135deg,${P.accent},${P.pink});border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1rem}
   .logo-text{font-family:'Playfair Display',serif;font-size:1.35rem;color:${P.accentSoft};letter-spacing:.02em}
   .logo-sub{font-size:.62rem;color:${P.muted};letter-spacing:.15em;text-transform:uppercase;margin-top:-2px}
-  .header-actions{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+  .header-actions{display:flex;gap:.6rem;align-items:center}
   .btn{padding:.5rem 1.1rem;border-radius:6px;font-family:'Jost',sans-serif;font-size:.8rem;font-weight:500;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .2s;border:none}
   .btn-primary{background:linear-gradient(135deg,${P.accent},#b8894e);color:#0d0a14;box-shadow:0 2px 12px rgba(201,169,110,.3)}
   .btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(201,169,110,.4)}
@@ -57,7 +69,7 @@ const css = `
   .ad-banner-text strong{display:block;font-size:.92rem;color:${P.text};margin-bottom:.15rem}
   .ad-banner-text span{font-size:.78rem;color:${P.muted}}
   .sidebar{display:flex;flex-direction:column;gap:1rem}
-  .ad-sidebar-card{padding:1rem;background:${P.surface};border:1px solid ${P.border};border-radius:10px;text-decoration:none;transition:border-color .2s;display:block}
+  .ad-sidebar-card{padding:1rem;background:${P.surface};border:1px solid ${P.border};border-radius:10px;text-decoration:none;transition:border-color .2s;display:block;position:relative}
   .ad-sidebar-card:hover{border-color:rgba(201,169,110,.3)}
   .ad-sidebar-label{font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:${P.muted};opacity:.7;margin-bottom:.5rem}
   .ad-sidebar-icon{width:100%;height:64px;background:linear-gradient(135deg,#2a1f3d,#1e1729);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem;margin-bottom:.65rem;overflow:hidden}
@@ -157,8 +169,6 @@ const css = `
   .empty-state-icon{font-size:2.8rem;margin-bottom:.85rem;opacity:.5}
   .empty-state h3{font-family:'Playfair Display',serif;color:${P.text};margin-bottom:.4rem}
   .success-banner{padding:.7rem 1rem;background:rgba(111,207,151,.1);border:1px solid rgba(111,207,151,.3);border-radius:7px;color:${P.success};font-size:.8rem;margin-bottom:1rem;text-align:center}
-  .error-banner{padding:.7rem 1rem;background:rgba(224,112,112,.1);border:1px solid rgba(224,112,112,.3);border-radius:7px;color:#e07070;font-size:.8rem;margin-bottom:1rem;text-align:center}
-  .loading{text-align:center;padding:3rem;color:${P.muted};font-size:.88rem}
   .text-link{background:none;border:none;color:${P.accent};cursor:pointer;text-decoration:underline;font:inherit;font-size:.76rem}
   ::-webkit-scrollbar{width:5px}
   ::-webkit-scrollbar-track{background:${P.bg}}
@@ -176,7 +186,10 @@ function AdBanner({ ad }) {
     <a className="ad-banner" href={ad.url} target="_blank" rel="noopener noreferrer">
       <span className="ad-banner-label">Ad</span>
       <div className="ad-banner-icon">{ad.image ? <img src={ad.image} alt={ad.title}/> : "💃"}</div>
-      <div className="ad-banner-text"><strong>{ad.title}</strong><span>{ad.tagline}</span></div>
+      <div className="ad-banner-text">
+        <strong>{ad.title}</strong>
+        <span>{ad.tagline}</span>
+      </div>
     </a>
   );
 }
@@ -190,7 +203,8 @@ function AdSidebar({ ads }) {
         <a key={ad.id} className="ad-sidebar-card" href={ad.url} target="_blank" rel="noopener noreferrer">
           <div className="ad-sidebar-label">Sponsored</div>
           <div className="ad-sidebar-icon">{ad.image ? <img src={ad.image} alt={ad.title}/> : "🩰"}</div>
-          <strong>{ad.title}</strong><br/><span>{ad.tagline}</span>
+          <strong>{ad.title}</strong><br/>
+          <span>{ad.tagline}</span>
           <div className="ad-sidebar-cta">Visit →</div>
         </a>
       ))}
@@ -198,105 +212,78 @@ function AdSidebar({ ads }) {
   );
 }
 
-export default function TutuTrade() {
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [loading, setLoading] = useState(true);
+export default function DanceMarketplace() {
   const [listings, setListings] = useState([]);
-  const [ads, setAds] = useState([]);
-  const [schools, setSchools] = useState([]);
+  const [ads, setAds] = useState(SAMPLE_ADS);
   const [commissionPct, setCommissionPct] = useState(1.5);
+  const [user, setUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [view, setView] = useState("browse");
   const [modal, setModal] = useState(null);
   const [selectedListing, setSelectedListing] = useState(null);
   const [authTab, setAuthTab] = useState("login");
   const [success, setSuccess] = useState("");
-  const [error, setError] = useState("");
   const [filters, setFilters] = useState({ search:"", style:"", size:"", condition:"", maxPrice:"" });
+
   const [authForm, setAuthForm] = useState({ name:"", email:"", password:"", schoolCode:"" });
   const [authError, setAuthError] = useState("");
   const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", condition:"", price:"", description:"", paypalEmail:"", image:null });
   const [createError, setCreateError] = useState("");
+  const [adminPass, setAdminPass] = useState("");
+  const [adminError, setAdminError] = useState("");
   const [editingAd, setEditingAd] = useState(null);
   const [adForm, setAdForm] = useState({ title:"", tagline:"", url:"", slot:"top", active:true, image:null });
-  const [newSchoolForm, setNewSchoolForm] = useState({ name:"", code:"" });
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        setIsAdmin(session.user.email === ADMIN_EMAIL);
-        setProfile(session.user.user_metadata);
-      }
-      setLoading(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        setIsAdmin(session.user.email === ADMIN_EMAIL);
-        setProfile(session.user.user_metadata);
-      } else {
-        setProfile(null);
-        setIsAdmin(false);
-      }
-    });
-    loadListings(); loadAds(); loadSchools(); loadCommission();
-    return () => subscription.unsubscribe();
+    (async () => {
+      try { const r = await window.storage.get("listings"); setListings(r ? JSON.parse(r.value) : SAMPLE_LISTINGS); } catch { setListings(SAMPLE_LISTINGS); }
+      try { const u = await window.storage.get("user"); if (u) setUser(JSON.parse(u.value)); } catch {}
+      try { const a = await window.storage.get("ads"); if (a) setAds(JSON.parse(a.value)); } catch {}
+      try { const c = await window.storage.get("commission"); if (c) setCommissionPct(parseFloat(c.value)); } catch {}
+      try { const adm = await window.storage.get("isAdmin"); if (adm && adm.value === "true") setIsAdmin(true); } catch {}
+    })();
   }, []);
 
-  const loadListings = async () => {
-    const { data } = await supabase.from("listings").select("*").order("created_at", { ascending: false });
-    if (data) setListings(data);
-  };
-  const loadAds = async () => {
-    const { data } = await supabase.from("ads").select("*").order("created_at", { ascending: false });
-    if (data) setAds(data);
-  };
-  const loadSchools = async () => {
-    const { data } = await supabase.from("schools").select("*").order("name");
-    if (data) setSchools(data);
-  };
-  const loadCommission = async () => {
-    const { data } = await supabase.from("settings").select("value").eq("key", "commission_pct").single();
-    if (data) setCommissionPct(parseFloat(data.value));
-  };
+  const saveListings = async l => { setListings(l); try { await window.storage.set("listings", JSON.stringify(l)); } catch {} };
+  const saveUser = async u => { setUser(u); try { if (u) await window.storage.set("user", JSON.stringify(u)); else await window.storage.delete("user"); } catch {} };
+  const saveAds = async a => { setAds(a); try { await window.storage.set("ads", JSON.stringify(a)); } catch {} };
+  const saveCommission = async v => { setCommissionPct(v); try { await window.storage.set("commission", String(v)); } catch {} };
+  const closeModal = () => { setModal(null); setAuthError(""); setCreateError(""); setAdminError(""); setEditingAd(null); };
 
-  const closeModal = () => { setModal(null); setAuthError(""); setCreateError(""); setEditingAd(null); };
-
-  const handleRegister = async () => {
+  const handleAuth = async () => {
     setAuthError("");
-    const { name, email, password, schoolCode } = authForm;
-    if (!name || !email || !password || !schoolCode) return setAuthError("Please fill in all fields.");
-    const school = schools.find(s => s.code === schoolCode.toUpperCase());
-    if (!school) return setAuthError("Invalid school code. Please check with your dance school.");
-    const { error } = await supabase.auth.signUp({
-      email, password,
-      options: { data: { full_name: name, school_name: school.name, school_id: school.id, school_code: school.code } }
-    });
-    if (error) return setAuthError(error.message);
-    closeModal();
-    setSuccess(`Welcome, ${name}! You've joined ${school.name}. Please check your email to verify your account.`);
-  };
-
-  const handleLogin = async () => {
-    setAuthError("");
-    const { email, password } = authForm;
-    if (!email || !password) return setAuthError("Please enter your email and password.");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return setAuthError("Incorrect email or password.");
-    closeModal();
+    if (authTab === "register") {
+      if (!authForm.name || !authForm.email || !authForm.password || !authForm.schoolCode) return setAuthError("Please fill in all fields.");
+      const school = SCHOOL_CODES[authForm.schoolCode.toUpperCase()];
+      if (!school) return setAuthError("Invalid school code. Check with your dance school admin.");
+      const u = { name:authForm.name, email:authForm.email, school, schoolCode:authForm.schoolCode.toUpperCase() };
+      await saveUser(u); closeModal(); setSuccess(`Welcome, ${u.name}! You've joined ${school}.`);
+    } else {
+      if (!authForm.email || !authForm.schoolCode) return setAuthError("Please enter your email and school code.");
+      const school = SCHOOL_CODES[authForm.schoolCode.toUpperCase()];
+      if (!school) return setAuthError("Invalid school code.");
+      const u = { name:authForm.email.split("@")[0], email:authForm.email, school, schoolCode:authForm.schoolCode.toUpperCase() };
+      await saveUser(u); closeModal();
+    }
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setUser(null); setProfile(null); setIsAdmin(false); setView("browse");
+    await saveUser(null); setIsAdmin(false);
+    try { await window.storage.delete("isAdmin"); } catch {}
+    setView("browse");
   };
 
-  const handleImageUpload = (e, setter) => {
+  const handleAdminLogin = async () => {
+    setAdminError("");
+    if (adminPass !== ADMIN_PASSWORD) return setAdminError("Incorrect password.");
+    setIsAdmin(true); try { await window.storage.set("isAdmin","true"); } catch {}
+    closeModal(); setView("admin");
+  };
+
+  const handleImageUpload = e => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => setter(f => ({ ...f, image: ev.target.result }));
+    reader.onload = ev => setCreateForm(f => ({ ...f, image:ev.target.result }));
     reader.readAsDataURL(file);
   };
 
@@ -305,53 +292,42 @@ export default function TutuTrade() {
     const { title, style, size, condition, price, paypalEmail } = createForm;
     if (!title || !style || !size || !condition || !price || !paypalEmail) return setCreateError("Please fill in all required fields.");
     if (isNaN(price) || Number(price) <= 0) return setCreateError("Please enter a valid price.");
-    const { error } = await supabase.from("listings").insert([{
-      title, style, size, condition, price: Number(price),
-      description: createForm.description, paypal_email: paypalEmail,
-      image: createForm.image,
-      seller_name: user.user_metadata?.full_name || user.email,
-      seller_email: user.email,
-      school_name: profile?.school_name,
-      school_id: profile?.school_id,
-    }]);
-    if (error) return setCreateError("Failed to create listing. Please try again.");
-    await loadListings();
+    const listing = { id:Date.now(), ...createForm, price:Number(createForm.price), seller:user.name, school:user.school, schoolCode:user.schoolCode, createdAt:Date.now() };
+    await saveListings([listing, ...listings]);
     setCreateForm({ title:"", style:"", size:"", condition:"", price:"", description:"", paypalEmail:"", image:null });
     closeModal(); setSuccess("Your listing is now live!");
   };
 
-  const handleDelete = async (id) => {
-    await supabase.from("listings").delete().eq("id", id);
-    await loadListings(); closeModal();
-  };
+  const handleDelete = async id => { await saveListings(listings.filter(l => l.id !== id)); closeModal(); };
 
-  const handleSaveCommission = async (val) => {
-    setCommissionPct(val);
-    await supabase.from("settings").upsert({ key: "commission_pct", value: String(val) });
+  const handleAdImageUpload = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setAdForm(f => ({ ...f, image:ev.target.result }));
+    reader.readAsDataURL(file);
   };
 
   const handleSaveAd = async () => {
     if (!adForm.title || !adForm.url) return;
-    if (editingAd === "new") await supabase.from("ads").insert([adForm]);
-    else await supabase.from("ads").update(adForm).eq("id", editingAd);
-    await loadAds(); closeModal();
+    const updated = editingAd === "new"
+      ? [...ads, { id:Date.now(), ...adForm }]
+      : ads.map(a => a.id === editingAd ? { ...a, ...adForm } : a);
+    await saveAds(updated); closeModal();
   };
 
-  const toggleAd = async (id, current) => { await supabase.from("ads").update({ active: !current }).eq("id", id); await loadAds(); };
-  const deleteAd = async (id) => { await supabase.from("ads").delete().eq("id", id); await loadAds(); };
+  const toggleAd = async id => { await saveAds(ads.map(a => a.id === id ? { ...a, active:!a.active } : a)); };
+  const deleteAd = async id => { await saveAds(ads.filter(a => a.id !== id)); };
 
-  const handleAddSchool = async () => {
-    if (!newSchoolForm.name || !newSchoolForm.code) return;
-    await supabase.from("schools").insert([{ name: newSchoolForm.name, code: newSchoolForm.code.toUpperCase() }]);
-    await loadSchools(); setNewSchoolForm({ name:"", code:"" }); setSuccess("School added!");
+  const openEditAd = ad => {
+    setEditingAd(ad.id);
+    setAdForm({ title:ad.title, tagline:ad.tagline, url:ad.url, slot:ad.slot, active:ad.active, image:ad.image||null });
+    setModal("editAd");
   };
-
-  const handleDeleteSchool = async (id) => { await supabase.from("schools").delete().eq("id", id); await loadSchools(); };
 
   const filtered = listings.filter(l => {
-    if (view === "mylistings") return l.seller_email === user?.email;
+    if (view === "mylistings") return user && l.seller === user.name && l.schoolCode === user.schoolCode;
     const q = filters.search.toLowerCase();
-    if (q && !l.title?.toLowerCase().includes(q) && !l.description?.toLowerCase().includes(q)) return false;
+    if (q && !l.title.toLowerCase().includes(q) && !l.description?.toLowerCase().includes(q)) return false;
     if (filters.style && l.style !== filters.style) return false;
     if (filters.size && l.size !== filters.size) return false;
     if (filters.condition && l.condition !== filters.condition) return false;
@@ -360,23 +336,25 @@ export default function TutuTrade() {
   });
 
   const topAd = ads.find(a => a.active && a.slot === "top");
-  const totalRevenue = listings.reduce((s, l) => s + calcFees(l.price, commissionPct).commission, 0);
-
-  if (loading) return <div className="app"><style>{css}</style><div className="loading" style={{paddingTop:"5rem"}}>Loading TutuTrade...</div></div>;
+  const totalEstRevenue = listings.reduce((s, l) => s + calcFees(l.price, commissionPct).commission, 0);
 
   return (
     <div className="app">
       <style>{css}</style>
+
       <header className="header">
         <div className="logo" onClick={() => setView("browse")}>
           <div className="logo-icon">🩰</div>
-          <div><div className="logo-text">TutuTrade</div><div className="logo-sub">Buy & Sell Dancewear</div></div>
+          <div>
+            <div className="logo-text">TutuTrade</div>
+            <div className="logo-sub">Dance Marketplace</div>
+          </div>
         </div>
         <div className="header-actions">
           {isAdmin && <button className="btn btn-admin btn-sm" onClick={() => setView("admin")}>⚙ Admin</button>}
           {user ? (
             <>
-              <span style={{fontSize:".78rem",color:P.muted}}>Hi, {user.user_metadata?.full_name?.split(" ")[0] || user.email}</span>
+              <span style={{fontSize:".78rem",color:P.muted}}>Hi, {user.name.split(" ")[0]}</span>
               <button className="btn btn-primary btn-sm" onClick={() => setModal("create")}>+ List Item</button>
               <button className="btn btn-ghost btn-sm" onClick={handleLogout}>Sign out</button>
             </>
@@ -384,6 +362,7 @@ export default function TutuTrade() {
             <>
               <button className="btn btn-ghost btn-sm" onClick={() => { setAuthTab("login"); setModal("auth"); }}>Sign in</button>
               <button className="btn btn-primary btn-sm" onClick={() => { setAuthTab("register"); setModal("auth"); }}>Join</button>
+              <button className="btn btn-admin btn-sm" onClick={() => setModal("adminLogin")}>Admin</button>
             </>
           )}
         </div>
@@ -391,48 +370,37 @@ export default function TutuTrade() {
 
       <div className="main">
         {success && <div className="success-banner">✓ {success}</div>}
-        {error && <div className="error-banner">⚠ {error}</div>}
 
+        {/* ── ADMIN VIEW ── */}
         {view === "admin" && isAdmin ? (
           <div>
             <div style={{marginBottom:"1.5rem"}}>
               <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"1.7rem",color:"#a99ef0",marginBottom:".3rem"}}>Admin Panel</h2>
-              <p style={{fontSize:".82rem",color:P.muted}}>Manage commission, advertisers, schools and listings.</p>
+              <p style={{fontSize:".82rem",color:P.muted}}>Manage commission rates, advertisers, and listings.</p>
             </div>
+
             <div className="admin-stat-grid">
               <div className="admin-stat"><div className="admin-stat-value">{listings.length}</div><div className="admin-stat-label">Listings</div></div>
               <div className="admin-stat"><div className="admin-stat-value">{commissionPct}%</div><div className="admin-stat-label">Commission</div></div>
-              <div className="admin-stat"><div className="admin-stat-value">£{totalRevenue.toFixed(2)}</div><div className="admin-stat-label">Est. Revenue</div></div>
+              <div className="admin-stat"><div className="admin-stat-value">£{totalEstRevenue.toFixed(2)}</div><div className="admin-stat-label">Est. Revenue</div></div>
             </div>
 
+            {/* Commission */}
             <div className="admin-section">
               <div className="admin-section-title">💰 Commission Rate</div>
               <div style={{display:"flex",alignItems:"center",gap:"1rem",flexWrap:"wrap",padding:"1rem",background:"rgba(124,111,224,.06)",border:"1px solid rgba(124,111,224,.15)",borderRadius:8}}>
                 <label style={{fontSize:".82rem",color:P.muted}}>Platform fee:</label>
                 <div style={{display:"flex",alignItems:"center",gap:".4rem"}}>
-                  <input className="admin-commission-input" type="number" min="0" max="30" step="0.1" value={commissionPct} onChange={e => handleSaveCommission(parseFloat(e.target.value)||0)}/>
+                  <input className="admin-commission-input" type="number" min="0" max="30" step="0.1" value={commissionPct} onChange={e => saveCommission(parseFloat(e.target.value)||0)} />
                   <span style={{color:P.muted,fontSize:".84rem"}}>%</span>
                 </div>
-                <span style={{fontSize:".78rem",color:P.muted}}>On a £50 sale: you earn <strong style={{color:P.accentSoft}}>£{calcFees(50,commissionPct).commission.toFixed(2)}</strong>, seller receives <strong style={{color:P.accentSoft}}>£{calcFees(50,commissionPct).sellerReceives.toFixed(2)}</strong></span>
+                <span style={{fontSize:".78rem",color:P.muted}}>
+                  Example — on a £50 sale: you earn <strong style={{color:P.accentSoft}}>£{calcFees(50,commissionPct).commission.toFixed(2)}</strong>, seller receives <strong style={{color:P.accentSoft}}>£{calcFees(50,commissionPct).sellerReceives.toFixed(2)}</strong>
+                </span>
               </div>
             </div>
 
-            <div className="admin-section">
-              <div className="admin-section-title">🏫 Dance Schools</div>
-              <div style={{display:"flex",gap:".65rem",marginBottom:"1rem",flexWrap:"wrap"}}>
-                <input className="filter-input" placeholder="School name" value={newSchoolForm.name} onChange={e=>setNewSchoolForm(f=>({...f,name:e.target.value}))} style={{flex:2}}/>
-                <input className="filter-input" placeholder="School code e.g. DANCE2024" value={newSchoolForm.code} onChange={e=>setNewSchoolForm(f=>({...f,code:e.target.value}))} style={{flex:1}}/>
-                <button className="btn btn-primary btn-sm" onClick={handleAddSchool}>+ Add School</button>
-              </div>
-              <table className="admin-table">
-                <thead><tr><th>School Name</th><th>Code</th><th></th></tr></thead>
-                <tbody>
-                  {schools.map(s => <tr key={s.id}><td>{s.name}</td><td><span className="tag tag-style">{s.code}</span></td><td><button className="btn btn-danger btn-sm" onClick={() => handleDeleteSchool(s.id)}>Remove</button></td></tr>)}
-                  {!schools.length && <tr><td colSpan={3} style={{color:P.muted,textAlign:"center",padding:"1.5rem"}}>No schools yet</td></tr>}
-                </tbody>
-              </table>
-            </div>
-
+            {/* Ads */}
             <div className="admin-section">
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
                 <div className="admin-section-title" style={{marginBottom:0,borderBottom:"none",paddingBottom:0}}>📢 Advertisers</div>
@@ -445,9 +413,11 @@ export default function TutuTrade() {
                     <tr key={ad.id}>
                       <td><span className={`ad-dot ${ad.active?"active":"inactive"}`}/>{ad.title}<div style={{fontSize:".7rem",color:P.muted}}>{ad.tagline}</div></td>
                       <td><span className="tag tag-style">{ad.slot}</span></td>
-                      <td><button className={`btn ${ad.active?"btn-success":"btn-ghost"} btn-sm`} onClick={() => toggleAd(ad.id, ad.active)}>{ad.active?"Live":"Paused"}</button></td>
+                      <td>
+                        <button className={`btn ${ad.active?"btn-success":"btn-ghost"} btn-sm`} onClick={() => toggleAd(ad.id)}>{ad.active?"Live":"Paused"}</button>
+                      </td>
                       <td style={{display:"flex",gap:".4rem"}}>
-                        <button className="btn btn-ghost btn-sm" onClick={() => { setEditingAd(ad.id); setAdForm({title:ad.title,tagline:ad.tagline,url:ad.url,slot:ad.slot,active:ad.active,image:ad.image||null}); setModal("editAd"); }}>Edit</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => openEditAd(ad)}>Edit</button>
                         <button className="btn btn-danger btn-sm" onClick={() => deleteAd(ad.id)}>Remove</button>
                       </td>
                     </tr>
@@ -457,24 +427,31 @@ export default function TutuTrade() {
               </table>
             </div>
 
+            {/* Listings */}
             <div className="admin-section">
               <div className="admin-section-title">📋 All Listings</div>
               <table className="admin-table">
                 <thead><tr><th>Item</th><th>Seller</th><th>School</th><th>Price</th><th>Your fee</th><th></th></tr></thead>
                 <tbody>
-                  {listings.map(l => { const { commission } = calcFees(l.price, commissionPct); return (
-                    <tr key={l.id}>
-                      <td>{l.title}</td><td style={{color:P.muted}}>{l.seller_name}</td>
-                      <td style={{color:P.muted,fontSize:".73rem"}}>{l.school_name}</td>
-                      <td>£{l.price}</td><td style={{color:P.accentSoft}}>£{commission}</td>
-                      <td><button className="btn btn-danger btn-sm" onClick={() => handleDelete(l.id)}>Remove</button></td>
-                    </tr>
-                  );})}
+                  {listings.map(l => {
+                    const { commission } = calcFees(l.price, commissionPct);
+                    return (
+                      <tr key={l.id}>
+                        <td>{l.title}</td>
+                        <td style={{color:P.muted}}>{l.seller}</td>
+                        <td style={{color:P.muted,fontSize:".73rem"}}>{l.school}</td>
+                        <td>£{l.price}</td>
+                        <td style={{color:P.accentSoft}}>£{commission}</td>
+                        <td><button className="btn btn-danger btn-sm" onClick={() => handleDelete(l.id)}>Remove</button></td>
+                      </tr>
+                    );
+                  })}
                   {!listings.length && <tr><td colSpan={6} style={{color:P.muted,textAlign:"center",padding:"1.5rem"}}>No listings</td></tr>}
                 </tbody>
               </table>
             </div>
           </div>
+
         ) : (
           <>
             {view === "browse" && (
@@ -482,26 +459,40 @@ export default function TutuTrade() {
                 <div className="hero-eyebrow">✦ TutuTrade ✦</div>
                 <h1 className="hero-title">Buy & sell <em>beautiful</em><br/>dancewear</h1>
                 <p className="hero-sub">Costumes, shoes & accessories from dancers in your school — pre-loved and ready to perform.</p>
-                {profile && <div className="school-badge">🏫 {profile.school_name}</div>}
+                {user && <div className="school-badge">🏫 {user.school}</div>}
               </div>
             )}
+
             {user && (
               <div className="nav-pills">
                 <button className={`nav-pill ${view==="browse"?"active":""}`} onClick={() => setView("browse")}>Browse all</button>
                 <button className={`nav-pill ${view==="mylistings"?"active":""}`} onClick={() => setView("mylistings")}>My listings</button>
               </div>
             )}
+
             {view === "browse" && <AdBanner ad={topAd} />}
+
             {view === "browse" && (
               <div className="filters">
-                <input className="filter-input" placeholder="Search costumes..." value={filters.search} onChange={e => setFilters(f=>({...f,search:e.target.value}))}/>
-                <select className="filter-select" value={filters.style} onChange={e => setFilters(f=>({...f,style:e.target.value}))}><option value="">All styles</option>{DANCE_STYLES.map(s=><option key={s}>{s}</option>)}</select>
-                <select className="filter-select" value={filters.size} onChange={e => setFilters(f=>({...f,size:e.target.value}))}><option value="">All sizes</option>{SIZES.map(s=><option key={s}>{s}</option>)}</select>
-                <select className="filter-select" value={filters.condition} onChange={e => setFilters(f=>({...f,condition:e.target.value}))}><option value="">Any condition</option>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select>
-                <input className="filter-input" placeholder="Max price £" style={{minWidth:90,maxWidth:110}} value={filters.maxPrice} onChange={e => setFilters(f=>({...f,maxPrice:e.target.value}))}/>
+                <input className="filter-input" placeholder="Search costumes..." value={filters.search} onChange={e => setFilters(f=>({...f,search:e.target.value}))} />
+                <select className="filter-select" value={filters.style} onChange={e => setFilters(f=>({...f,style:e.target.value}))}>
+                  <option value="">All styles</option>
+                  {DANCE_STYLES.map(s => <option key={s}>{s}</option>)}
+                </select>
+                <select className="filter-select" value={filters.size} onChange={e => setFilters(f=>({...f,size:e.target.value}))}>
+                  <option value="">All sizes</option>
+                  {SIZES.map(s => <option key={s}>{s}</option>)}
+                </select>
+                <select className="filter-select" value={filters.condition} onChange={e => setFilters(f=>({...f,condition:e.target.value}))}>
+                  <option value="">Any condition</option>
+                  {CONDITIONS.map(c => <option key={c}>{c}</option>)}
+                </select>
+                <input className="filter-input" placeholder="Max price £" style={{minWidth:90,maxWidth:110}} value={filters.maxPrice} onChange={e => setFilters(f=>({...f,maxPrice:e.target.value}))} />
               </div>
             )}
+
             <div className="listing-count">Showing <strong>{filtered.length}</strong> {filtered.length===1?"listing":"listings"}{view==="mylistings"?" — your items":""}</div>
+
             <div className={view==="browse" ? "layout" : ""}>
               <div>
                 <div className="grid">
@@ -520,7 +511,7 @@ export default function TutuTrade() {
                       <div className="card-body">
                         <div className="card-style-tag">{l.style}</div>
                         <div className="card-title">{l.title}</div>
-                        <div className="card-meta">Size: {l.size} · {l.school_name}</div>
+                        <div className="card-meta">Size: {l.size} · {l.school}</div>
                         <div className="card-footer">
                           <div className="price">£{l.price} <span>GBP</span></div>
                           <button className="btn btn-outline btn-sm" onClick={e=>{e.stopPropagation();setSelectedListing(l);setModal("detail");}}>View</button>
@@ -536,33 +527,51 @@ export default function TutuTrade() {
         )}
       </div>
 
+      {/* ── AUTH MODAL ── */}
       {modal === "auth" && (
         <div className="overlay" onClick={closeModal}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-header"><div className="modal-title">Welcome to TutuTrade</div><button className="modal-close" onClick={closeModal}>×</button></div>
+            <div className="modal-header"><div className="modal-title">Welcome</div><button className="modal-close" onClick={closeModal}>×</button></div>
             <div className="modal-body">
               <div className="auth-tabs">
                 <button className={`auth-tab ${authTab==="login"?"active":""}`} onClick={()=>setAuthTab("login")}>Sign In</button>
                 <button className={`auth-tab ${authTab==="register"?"active":""}`} onClick={()=>setAuthTab("register")}>Join</button>
               </div>
-              {authTab==="register" && <div className="school-code-info">🔑 You need a school code from your dance school to join.</div>}
+              {authTab==="register" && <div className="school-code-info">🔑 You need a school code from your dance school admin to join.</div>}
               {authError && <div className="form-error" style={{marginBottom:"1rem"}}>⚠ {authError}</div>}
               {authTab==="register" && <div className="form-group"><label className="form-label">Your name</label><input className="form-input" placeholder="e.g. Sarah Mitchell" value={authForm.name} onChange={e=>setAuthForm(f=>({...f,name:e.target.value}))}/></div>}
               <div className="form-group"><label className="form-label">Email</label><input className="form-input" type="email" placeholder="you@example.com" value={authForm.email} onChange={e=>setAuthForm(f=>({...f,email:e.target.value}))}/></div>
-              <div className="form-group"><label className="form-label">Password</label><input className="form-input" type="password" placeholder={authTab==="register"?"Create a password":"Your password"} value={authForm.password} onChange={e=>setAuthForm(f=>({...f,password:e.target.value}))}/></div>
-              {authTab==="register" && (
-                <div className="form-group">
-                  <label className="form-label">School code</label>
-                  <input className="form-input" placeholder="Enter your school code" value={authForm.schoolCode} onChange={e=>setAuthForm(f=>({...f,schoolCode:e.target.value}))}/>
-                  <div className="form-hint">Ask your dance school admin for the code</div>
-                </div>
-              )}
-              <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={authTab==="register" ? handleRegister : handleLogin}>{authTab==="register"?"Create account":"Sign in"}</button>
+              {authTab==="register" && <div className="form-group"><label className="form-label">Password</label><input className="form-input" type="password" placeholder="Create a password" value={authForm.password} onChange={e=>setAuthForm(f=>({...f,password:e.target.value}))}/></div>}
+              <div className="form-group">
+                <label className="form-label">School code</label>
+                <input className="form-input" placeholder="Enter your school code" value={authForm.schoolCode} onChange={e=>setAuthForm(f=>({...f,schoolCode:e.target.value}))}/>
+                <div className="form-hint">Demo codes: DANCE2024 · STUDIO01 · GRACE123</div>
+              </div>
+              <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={handleAuth}>{authTab==="register"?"Create account":"Sign in"}</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* ── ADMIN LOGIN MODAL ── */}
+      {modal === "adminLogin" && (
+        <div className="overlay" onClick={closeModal}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-header"><div className="modal-title admin-title">⚙ Admin Access</div><button className="modal-close" onClick={closeModal}>×</button></div>
+            <div className="modal-body">
+              {adminError && <div className="form-error" style={{marginBottom:"1rem"}}>⚠ {adminError}</div>}
+              <div className="form-group">
+                <label className="form-label">Admin password</label>
+                <input className="form-input" type="password" placeholder="Enter admin password" value={adminPass} onChange={e=>setAdminPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAdminLogin()}/>
+                <div className="form-hint">Demo: TutuTrade-admin-2024</div>
+              </div>
+              <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={handleAdminLogin}>Access admin panel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CREATE LISTING MODAL ── */}
       {modal === "create" && (
         <div className="overlay" onClick={closeModal}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -588,7 +597,7 @@ export default function TutuTrade() {
               <div className="form-group"><label className="form-label">Description</label><textarea className="form-textarea" placeholder="Describe the item, any wear, original price..." value={createForm.description} onChange={e=>setCreateForm(f=>({...f,description:e.target.value}))}/></div>
               <div className="form-group">
                 <label className="form-label">Photo</label>
-                <label className="upload-area"><input type="file" accept="image/*" onChange={e=>handleImageUpload(e,setCreateForm)}/>{createForm.image?<img src={createForm.image} className="upload-preview" alt="preview"/>:<div>📷 Click to upload photo</div>}</label>
+                <label className="upload-area"><input type="file" accept="image/*" onChange={handleImageUpload}/>{createForm.image?<img src={createForm.image} className="upload-preview" alt="preview"/>:<div>📷 Click to upload photo</div>}</label>
               </div>
               <div className="form-group">
                 <label className="form-label">Your PayPal email *</label>
@@ -601,9 +610,10 @@ export default function TutuTrade() {
         </div>
       )}
 
+      {/* ── DETAIL MODAL ── */}
       {modal === "detail" && selectedListing && (() => {
         const { commission } = calcFees(selectedListing.price, commissionPct);
-        const isOwner = user?.email === selectedListing.seller_email;
+        const isOwner = user && user.name === selectedListing.seller;
         return (
           <div className="overlay" onClick={closeModal}>
             <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -618,34 +628,35 @@ export default function TutuTrade() {
                 <div className="detail-price">£{selectedListing.price}</div>
                 <p className="detail-desc">{selectedListing.description||"No description provided."}</p>
                 <div className="seller-info">
-                  <div><strong>Seller:</strong> {selectedListing.seller_name}</div>
-                  <div className="seller-school">📍 {selectedListing.school_name}</div>
+                  <div><strong>Seller:</strong> {selectedListing.seller}</div>
+                  <div className="seller-school">📍 {selectedListing.school}</div>
                 </div>
                 {!isOwner && (
                   <div className="commission-box">
                     <div className="commission-row"><span className="commission-label">Item price</span><span className="commission-value">£{selectedListing.price}</span></div>
                     <div className="commission-row"><span className="commission-label">Platform fee ({commissionPct}%)</span><span className="commission-value">£{commission}</span></div>
                     <div className="commission-row total"><span>You pay</span><span>£{selectedListing.price}</span></div>
-                    <div style={{fontSize:".67rem",color:P.muted,marginTop:".35rem"}}>Platform fee is deducted from the seller's payout — you pay the listed price only.</div>
+                    <div style={{fontSize:".67rem",color:P.muted,marginTop:".35rem"}}>The platform fee is deducted from the seller's payout — you pay the listed price only.</div>
                   </div>
                 )}
                 {isOwner ? (
                   <button className="btn btn-danger" style={{width:"100%"}} onClick={()=>handleDelete(selectedListing.id)}>Remove listing</button>
                 ) : (
-                  <a href={`https://www.paypal.com/paypalme/${selectedListing.paypal_email?.split("@")[0]}/${selectedListing.price}GBP`} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>
+                  <a href={`https://www.paypal.com/paypalme/${selectedListing.paypalEmail.split("@")[0]}/${selectedListing.price}GBP`} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>
                     <button className="paypal-btn">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.067 8.478c.492.88.556 2.014.3 3.327-.74 3.806-3.276 5.12-6.514 5.12h-.5a.805.805 0 0 0-.794.68l-.04.22-.63 3.993-.032.17a.804.804 0 0 1-.794.679H7.72a.483.483 0 0 1-.477-.558L7.418 21h1.518l.95-6.02h1.385c4.678 0 7.75-2.203 8.796-6.502zm-2.96-5.09c.762.868.983 1.81.755 3.137-.093.534-.26 1.02-.5 1.46-.838-3.511-3.235-4.7-7.438-4.7H5.964l.947-5.951A.483.483 0 0 1 7.388 1h5.787c3.44 0 5.58 1.03 6.557 3.019l-.625-.631z"/></svg>
                       Pay £{selectedListing.price} with PayPal
                     </button>
                   </a>
                 )}
-                {!user && <p style={{textAlign:"center",fontSize:".76rem",color:P.muted,marginTop:".7rem"}}><button className="text-link" onClick={()=>{setModal("auth");setAuthTab("login");}}>Sign in</button> to purchase</p>}
+                {!user && <p style={{textAlign:"center",fontSize:".76rem",color:P.muted,marginTop:".7rem"}}><button className="text-link" onClick={()=>{setModal("auth");setAuthTab("login");}}>Sign in</button> to contact the seller</p>}
               </div>
             </div>
           </div>
         );
       })()}
 
+      {/* ── EDIT AD MODAL ── */}
       {modal === "editAd" && (
         <div className="overlay" onClick={closeModal}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -660,7 +671,7 @@ export default function TutuTrade() {
               </div>
               <div className="form-group">
                 <label className="form-label">Logo / image</label>
-                <label className="upload-area"><input type="file" accept="image/*" onChange={e=>handleImageUpload(e,setAdForm)}/>{adForm.image?<img src={adForm.image} className="upload-preview" alt="ad preview"/>:<div>🖼 Click to upload logo or image</div>}</label>
+                <label className="upload-area"><input type="file" accept="image/*" onChange={handleAdImageUpload}/>{adForm.image?<img src={adForm.image} className="upload-preview" alt="ad preview"/>:<div>🖼 Click to upload logo or image</div>}</label>
               </div>
               <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={handleSaveAd}>{editingAd==="new"?"Add advertiser":"Save changes"}</button>
             </div>
