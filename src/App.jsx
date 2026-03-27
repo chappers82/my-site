@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 
 // ─── CONFIG ────────────────────────────────────────────────────────────────
-const ADMIN_PASSWORD = "arabesque-admin-2024"; // Change this!
+const ADMIN_PASSWORD = "Gr4ntTutu*"; // Change this!
 const SCHOOL_CODES = { "DANCE2024": "Starlight Dance Academy", "STUDIO01": "The Dance Studio", "GRACE123": "Grace Dance School" };
 const DANCE_STYLES = ["Ballet", "Jazz", "Tap", "Contemporary", "Hip Hop", "Musical Theatre", "Acro", "Irish", "Ballroom", "Lyrical"];
 const SIZES = ["Age 2-3","Age 3-4","Age 4-5","Age 5-6","Age 6-7","Age 7-8","Age 8-9","Age 9-10","Age 10-11","Age 11-12","Teen XS","Teen S","Teen M","Teen L","Adult XS","Adult S","Adult M","Adult L","Adult XL"];
