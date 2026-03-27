@@ -346,7 +346,7 @@ export default function DanceMarketplace() {
         <div className="logo" onClick={() => setView("browse")}>
           <div className="logo-icon">🩰</div>
           <div>
-            <div className="logo-text">Arabesque</div>
+            <div className="logo-text">Tutu Trade</div>
             <div className="logo-sub">Dance Marketplace</div>
           </div>
         </div>
@@ -563,7 +563,7 @@ export default function DanceMarketplace() {
               <div className="form-group">
                 <label className="form-label">Admin password</label>
                 <input className="form-input" type="password" placeholder="Enter admin password" value={adminPass} onChange={e=>setAdminPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAdminLogin()}/>
-                <div className="form-hint">Demo: arabesque-admin-2024</div>
+                <div className="form-hint">Demo: tututrade-admin-2024</div>
               </div>
               <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={handleAdminLogin}>Access admin panel</button>
             </div>
