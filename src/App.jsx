@@ -1,6 +1,45 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
 
+// ─── EMAIL ────────────────────────────────────────────────────────────────
+const sendSoldEmail = async ({ listing, commissionPct }) => {
+  const { commission, sellerReceives } = calcFees(listing.price, commissionPct);
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${import.meta.env.VITE_RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: "TutuTrade <onboarding@resend.dev>",
+        to: [ADMIN_EMAIL],
+        subject: `💰 Sale: ${listing.title} — £${listing.price}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:2rem;background:#0d0a14;color:#f0eaf8;border-radius:12px">
+            <h2 style="color:#c9a96e;margin-bottom:1rem">🩰 TutuTrade — Item Sold!</h2>
+            <p style="color:#8a7a9e;margin-bottom:1.5rem">An item has been marked as sold. Here are the payout details:</p>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:1.5rem">
+              <tr><td style="padding:.5rem;color:#8a7a9e;border-bottom:1px solid #2e2340">Item</td><td style="padding:.5rem;border-bottom:1px solid #2e2340"><strong>${listing.title}</strong></td></tr>
+              <tr><td style="padding:.5rem;color:#8a7a9e;border-bottom:1px solid #2e2340">Seller</td><td style="padding:.5rem;border-bottom:1px solid #2e2340">${listing.seller_name}</td></tr>
+              <tr><td style="padding:.5rem;color:#8a7a9e;border-bottom:1px solid #2e2340">Seller email</td><td style="padding:.5rem;border-bottom:1px solid #2e2340">${listing.seller_email}</td></tr>
+              <tr><td style="padding:.5rem;color:#8a7a9e;border-bottom:1px solid #2e2340">School</td><td style="padding:.5rem;border-bottom:1px solid #2e2340">${listing.school_name}</td></tr>
+              <tr><td style="padding:.5rem;color:#8a7a9e;border-bottom:1px solid #2e2340">Sale price</td><td style="padding:.5rem;border-bottom:1px solid #2e2340">£${listing.price}</td></tr>
+              <tr><td style="padding:.5rem;color:#8a7a9e;border-bottom:1px solid #2e2340">Your commission (${commissionPct}%)</td><td style="padding:.5rem;border-bottom:1px solid #2e2340;color:#c9a96e"><strong>£${commission}</strong></td></tr>
+              <tr><td style="padding:.5rem;color:#8a7a9e">Pay seller</td><td style="padding:.5rem;color:#6fcf97;font-size:1.2rem"><strong>£${sellerReceives}</strong></td></tr>
+            </table>
+            <a href="https://www.paypal.com/send?recipient=${listing.seller_email}&amount=${sellerReceives}" 
+               style="display:inline-block;padding:.75rem 1.5rem;background:#0070ba;color:white;border-radius:8px;text-decoration:none;font-weight:500">
+              Pay £${sellerReceives} via PayPal →
+            </a>
+            <p style="color:#8a7a9e;font-size:.75rem;margin-top:1.5rem">This email was sent automatically by TutuTrade when the item was marked as sold.</p>
+          </div>
+        `,
+      }),
+    });
+  } catch (e) { console.error("Email error:", e); }
+};
+
 const DANCE_STYLES = ["Ballet","Jazz","Tap","Contemporary","Hip Hop","Musical Theatre","Acro","Irish","Ballroom","Lyrical"];
 const SIZES = ["Age 2-3","Age 3-4","Age 4-5","Age 5-6","Age 6-7","Age 7-8","Age 8-9","Age 9-10","Age 10-11","Age 11-12","Teen XS","Teen S","Teen M","Teen L","Adult XS","Adult S","Adult M","Adult L","Adult XL"];
 const CONDITIONS = ["New with tags","Excellent","Good","Well loved"];
@@ -141,6 +180,16 @@ const css = `
   .price{font-family:'Playfair Display',serif;font-size:1.25rem;color:${P.accentSoft}}
   .price span{font-size:.72rem;color:${P.muted};font-family:'Jost',sans-serif}
   .school-stripe{height:3px;width:100%}
+  .sold-overlay{position:absolute;inset:0;background:rgba(13,10,20,.65);display:flex;align-items:center;justify-content:center;z-index:2}
+  .sold-badge{padding:.35rem 1rem;background:#e07070;color:white;border-radius:20px;font-size:.72rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
+  .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:fadeIn .15s ease}
+  .lightbox img{max-width:92vw;max-height:92vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 48px rgba(0,0,0,.6)}
+  .lightbox-close{position:absolute;top:1.25rem;right:1.5rem;background:rgba(255,255,255,.12);border:none;color:white;font-size:1.6rem;cursor:pointer;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background .2s}
+  .lightbox-close:hover{background:rgba(255,255,255,.22)}
+  .show-sold-toggle{display:flex;align-items:center;gap:.5rem;font-size:.75rem;color:${P.muted};cursor:pointer;padding:.4rem .8rem;border:1px solid ${P.border};border-radius:20px;background:transparent;font-family:'Jost',sans-serif;transition:all .2s;white-space:nowrap}
+  .show-sold-toggle:hover{border-color:${P.accent};color:${P.accent}}
+  .show-sold-toggle.active{border-color:${P.accent};color:${P.accent};background:rgba(201,169,110,.08)}
+  .card-image-wrap{position:relative;cursor:zoom-in}
 
   /* MODALS */
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem;animation:fadeIn .2s ease}
@@ -280,6 +329,8 @@ export default function TutuTrade() {
   const [authTab, setAuthTab] = useState("login");
   const [success, setSuccess] = useState("");
   const [filters, setFilters] = useState({ search:"", style:"", size:"", condition:"", maxPrice:"", school:"" });
+  const [showSold, setShowSold] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState(null);
   const [authForm, setAuthForm] = useState({ name:"", email:"", password:"", schoolCode:"" });
   const [authError, setAuthError] = useState("");
   const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", condition:"", price:"", description:"", image:null, schoolId:"" });
@@ -290,6 +341,9 @@ export default function TutuTrade() {
   const [editingSchoolColor, setEditingSchoolColor] = useState(null);
   const [addSchoolCode, setAddSchoolCode] = useState("");
   const [addSchoolError, setAddSchoolError] = useState("");
+  const [accountForm, setAccountForm] = useState({ email:"", password:"", confirmPassword:"" });
+  const [accountMsg, setAccountMsg] = useState("");
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
   const [copiedLink, setCopiedLink] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [confirmDeleteSchool, setConfirmDeleteSchool] = useState(null);
@@ -375,6 +429,34 @@ export default function TutuTrade() {
 
   const handleLeaveSchool = async (schoolId) => { await supabase.from("user_schools").delete().eq("user_email", user.email).eq("school_id", schoolId); await loadUserSchools(user.email); };
 
+  const handleUpdateEmail = async () => {
+    setAccountMsg("");
+    if (!accountForm.email) return setAccountMsg("Please enter a new email address.");
+    const { error } = await supabase.auth.updateUser({ email: accountForm.email });
+    if (error) return setAccountMsg(`Error: ${error.message}`);
+    setAccountMsg("✓ Confirmation sent to your new email address. Click the link to confirm the change.");
+    setAccountForm(f => ({ ...f, email: "" }));
+  };
+
+  const handleUpdatePassword = async () => {
+    setAccountMsg("");
+    if (!accountForm.password) return setAccountMsg("Please enter a new password.");
+    if (accountForm.password !== accountForm.confirmPassword) return setAccountMsg("Passwords don't match.");
+    if (accountForm.password.length < 6) return setAccountMsg("Password must be at least 6 characters.");
+    const { error } = await supabase.auth.updateUser({ password: accountForm.password });
+    if (error) return setAccountMsg(`Error: ${error.message}`);
+    setAccountMsg("✓ Password updated successfully.");
+    setAccountForm(f => ({ ...f, password: "", confirmPassword: "" }));
+  };
+
+  const handleDeleteAccount = async () => {
+    await supabase.from("user_schools").delete().eq("user_email", user.email);
+    await supabase.from("listings").delete().eq("seller_email", user.email);
+    await supabase.auth.signOut();
+    setUser(null); setUserSchools([]); setIsAdmin(false); setView("browse");
+    setSuccess("Your account has been deleted.");
+  };
+
   const handleImageUpload = (e, setter) => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
@@ -397,6 +479,16 @@ export default function TutuTrade() {
   };
 
   const handleDelete = async (id) => { await supabase.from("listings").delete().eq("id", id); await loadListings(); closeModal(); };
+  const handleMarkSold = async (id) => {
+    await supabase.from("listings").update({ sold: true, sold_at: new Date().toISOString() }).eq("id", id);
+    const listing = listings.find(l => l.id === id);
+    if (listing) await sendSoldEmail({ listing, commissionPct });
+    await loadListings(); closeModal(); setSuccess("Item marked as sold! Payout email sent to your inbox.");
+  };
+  const handleMarkUnsold = async (id) => {
+    await supabase.from("listings").update({ sold: false, sold_at: null }).eq("id", id);
+    await loadListings(); setSuccess("Item relisted!");
+  };
   const handleSaveCommission = async (val) => { setCommissionPct(val); await supabase.from("settings").upsert({ key:"commission_pct", value:String(val) }); };
 
   const handleAddSchoolAdmin = async () => {
@@ -472,6 +564,7 @@ export default function TutuTrade() {
 
   const filtered = listings.filter(l => {
     if (view === "mylistings") return l.seller_email === user?.email;
+    if (!showSold && l.sold) return false;
     const q = filters.search.toLowerCase();
     if (q && !l.title?.toLowerCase().includes(q) && !l.description?.toLowerCase().includes(q)) return false;
     if (filters.style && l.style !== filters.style) return false;
@@ -741,17 +834,23 @@ export default function TutuTrade() {
               <div className="admin-section">
                 <div className="admin-section-title">📋 All Listings</div>
                 <table className="admin-table">
-                  <thead><tr><th>Item</th><th>Seller</th><th>School</th><th>Price</th><th>Your fee</th><th></th></tr></thead>
+                  <thead><tr><th>Item</th><th>Seller</th><th>School</th><th>Price</th><th>Your fee</th><th>Status</th><th></th></tr></thead>
                   <tbody>
                     {listings.map(l => { const { commission } = calcFees(l.price, commissionPct); const sc = getSchoolColor(l.school_id); return (
-                      <tr key={l.id}>
-                        <td>{l.title}</td><td style={{color:P.muted}}>{l.seller_name}</td>
+                      <tr key={l.id} style={{opacity:l.sold?0.6:1}}>
+                        <td>{l.sold && <span style={{fontSize:".65rem",color:"#e07070",marginRight:".4rem"}}>[SOLD]</span>}{l.title}</td><td style={{color:P.muted}}>{l.seller_name}</td>
                         <td><span style={{padding:".18rem .55rem",borderRadius:20,fontSize:".65rem",background:hexToRgba(sc,0.12),color:sc,border:`1px solid ${hexToRgba(sc,0.3)}`}}>{l.school_name}</span></td>
                         <td>£{l.price}</td><td style={{color:P.accentSoft}}>£{commission}</td>
+                        <td>
+                          {l.sold
+                            ? <button className="btn btn-ghost btn-sm" onClick={() => handleMarkUnsold(l.id)}>Relist</button>
+                            : <button className="btn btn-success btn-sm" onClick={() => handleMarkSold(l.id)}>Mark sold</button>
+                          }
+                        </td>
                         <td><button className="btn btn-danger btn-sm" onClick={() => handleDelete(l.id)}>Remove</button></td>
                       </tr>
                     );})}
-                    {!listings.length && <tr><td colSpan={6} style={{color:P.muted,textAlign:"center",padding:"1.5rem"}}>No listings</td></tr>}
+                    {!listings.length && <tr><td colSpan={7} style={{color:P.muted,textAlign:"center",padding:"1.5rem"}}>No listings</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -786,6 +885,44 @@ export default function TutuTrade() {
                   <button className="btn btn-primary" onClick={handleAddSchool}>Join</button>
                 </div>
                 <div className="form-hint">Ask your dance school admin for their code</div>
+              </div>
+
+              {/* ACCOUNT MANAGEMENT */}
+              <div style={{marginTop:"1.5rem"}}>
+                <div style={{fontSize:".72rem",textTransform:"uppercase",letterSpacing:".1em",color:P.muted,marginBottom:".75rem"}}>Account Settings</div>
+                {accountMsg && <div style={{padding:".65rem .85rem",background:accountMsg.startsWith("✓")?"rgba(111,207,151,.1)":"rgba(224,112,112,.1)",border:`1px solid ${accountMsg.startsWith("✓")?"rgba(111,207,151,.3)":"rgba(224,112,112,.3)"}`,borderRadius:7,fontSize:".78rem",color:accountMsg.startsWith("✓")?P.success:"#e07070",marginBottom:"1rem"}}>{accountMsg}</div>}
+
+                <div style={{padding:"1rem",background:P.surface,border:`1px solid ${P.border}`,borderRadius:10,marginBottom:".75rem"}}>
+                  <div className="form-label" style={{marginBottom:".75rem"}}>Change Email</div>
+                  <div style={{display:"flex",gap:".5rem"}}>
+                    <input className="form-input" type="email" placeholder="New email address" value={accountForm.email} onChange={e=>setAccountForm(f=>({...f,email:e.target.value}))} style={{flex:1}}/>
+                    <button className="btn btn-primary btn-sm" onClick={handleUpdateEmail}>Update</button>
+                  </div>
+                </div>
+
+                <div style={{padding:"1rem",background:P.surface,border:`1px solid ${P.border}`,borderRadius:10,marginBottom:".75rem"}}>
+                  <div className="form-label" style={{marginBottom:".75rem"}}>Change Password</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:".5rem"}}>
+                    <input className="form-input" type="password" placeholder="New password" value={accountForm.password} onChange={e=>setAccountForm(f=>({...f,password:e.target.value}))}/>
+                    <input className="form-input" type="password" placeholder="Confirm new password" value={accountForm.confirmPassword} onChange={e=>setAccountForm(f=>({...f,confirmPassword:e.target.value}))}/>
+                    <button className="btn btn-primary btn-sm" style={{alignSelf:"flex-start"}} onClick={handleUpdatePassword}>Update password</button>
+                  </div>
+                </div>
+
+                <div style={{padding:"1rem",background:"rgba(224,112,112,.05)",border:"1px solid rgba(224,112,112,.2)",borderRadius:10}}>
+                  <div className="form-label" style={{marginBottom:".5rem",color:"#e07070"}}>Danger Zone</div>
+                  {!confirmDeleteAccount ? (
+                    <button className="btn btn-danger btn-sm" onClick={() => setConfirmDeleteAccount(true)}>Delete my account</button>
+                  ) : (
+                    <div>
+                      <p style={{fontSize:".8rem",color:P.muted,marginBottom:".75rem"}}>This will permanently delete your account and all your listings. This cannot be undone.</p>
+                      <div style={{display:"flex",gap:".5rem"}}>
+                        <button className="btn btn-danger btn-sm" onClick={handleDeleteAccount}>Yes, delete my account</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDeleteAccount(false)}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -871,7 +1008,12 @@ export default function TutuTrade() {
               </div>
             )}
 
-            <div className="listing-count">Showing <strong>{filtered.length}</strong> {filtered.length===1?"listing":"listings"}{view==="mylistings"?" — your items":""}</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.1rem",flexWrap:"wrap",gap:".5rem"}}>
+              <div className="listing-count">Showing <strong>{filtered.length}</strong> {filtered.length===1?"listing":"listings"}{view==="mylistings"?" — your items":""}</div>
+              {view === "browse" && <button className={`show-sold-toggle ${showSold?"active":""}`} onClick={() => setShowSold(s=>!s)}>
+                {showSold ? "✓ Showing sold" : "Show sold items"}
+              </button>}
+            </div>
 
             <div className={view==="browse" ? "layout" : ""}>
               <div>
@@ -885,11 +1027,14 @@ export default function TutuTrade() {
                   ) : filtered.map(l => {
                     const sc = getSchoolColor(l.school_id);
                     return (
-                      <div className="card" key={l.id} style={{borderColor:hexToRgba(sc,0.25)}} onClick={() => { setSelectedListing(l); setModal("detail"); }}>
+                      <div className="card" key={l.id} style={{borderColor:hexToRgba(sc,0.25),opacity:l.sold?0.7:1}} onClick={() => { if (!l.sold) { setSelectedListing(l); setModal("detail"); } }}>
                         <div className="school-stripe" style={{background:sc}}/>
-                        <div className="card-image">
-                          {l.image ? <img src={l.image} alt={l.title}/> : styleEmoji[l.style]||"👗"}
-                          <span className={`condition-pill condition-${conditionKey[l.condition]||"good"}`}>{l.condition}</span>
+                        <div className="card-image-wrap">
+                          <div className="card-image" onClick={e=>{if(l.image){e.stopPropagation();setLightboxImage(l.image);}}}>
+                            {l.image ? <img src={l.image} alt={l.title}/> : styleEmoji[l.style]||"👗"}
+                            <span className={`condition-pill condition-${conditionKey[l.condition]||"good"}`}>{l.condition}</span>
+                          </div>
+                          {l.sold && <div className="sold-overlay"><span className="sold-badge">Sold</span></div>}
                         </div>
                         <div className="card-body">
                           <div className="card-style-tag" style={{color:sc}}>{l.style}</div>
@@ -901,8 +1046,11 @@ export default function TutuTrade() {
                             </span>
                           </div>
                           <div className="card-footer">
-                            <div className="price">£{l.price} <span>GBP</span></div>
-                            <button className="btn btn-sm" style={{background:"transparent",color:sc,border:`1px solid ${hexToRgba(sc,0.5)}`}} onClick={e=>{e.stopPropagation();setSelectedListing(l);setModal("detail");}}>View</button>
+                            <div className="price" style={{textDecoration:l.sold?"line-through":"none",opacity:l.sold?0.5:1}}>£{l.price} <span>GBP</span></div>
+                            {l.sold
+                              ? <span style={{fontSize:".72rem",color:"#e07070",fontStyle:"italic"}}>Sold</span>
+                              : <button className="btn btn-sm" style={{background:"transparent",color:sc,border:`1px solid ${hexToRgba(sc,0.5)}`}} onClick={e=>{e.stopPropagation();setSelectedListing(l);setModal("detail");}}>View</button>
+                            }
                           </div>
                         </div>
                       </div>
@@ -995,7 +1143,7 @@ export default function TutuTrade() {
             <div className="modal" onClick={e=>e.stopPropagation()} style={{borderTop:`3px solid ${sc}`}}>
               <div className="modal-header"><div className="modal-title">{selectedListing.title}</div><button className="modal-close" onClick={closeModal}>×</button></div>
               <div className="modal-body">
-                <div className="detail-image">{selectedListing.image?<img src={selectedListing.image} alt={selectedListing.title}/>:styleEmoji[selectedListing.style]||"👗"}</div>
+                <div className="detail-image" style={{cursor:selectedListing.image?"zoom-in":"default"}} onClick={()=>selectedListing.image&&setLightboxImage(selectedListing.image)}>{selectedListing.image?<img src={selectedListing.image} alt={selectedListing.title}/>:styleEmoji[selectedListing.style]||"👗"}</div>
                 <div className="detail-tags">
                   <span className="tag tag-style">{selectedListing.style}</span>
                   <span className="tag tag-size">{selectedListing.size}</span>
@@ -1016,7 +1164,13 @@ export default function TutuTrade() {
                   </div>
                 )}
                 {isOwner ? (
-                  <button className="btn btn-danger" style={{width:"100%"}} onClick={()=>handleDelete(selectedListing.id)}>Remove listing</button>
+                  <div style={{display:"flex",flexDirection:"column",gap:".5rem"}}>
+                    {!selectedListing.sold
+                      ? <button className="btn btn-success" style={{width:"100%",padding:".72rem"}} onClick={()=>handleMarkSold(selectedListing.id)}>✓ Mark as sold</button>
+                      : <button className="btn btn-ghost" style={{width:"100%",padding:".72rem"}} onClick={()=>handleMarkUnsold(selectedListing.id)}>↩ Relist item</button>
+                    }
+                    <button className="btn btn-danger" style={{width:"100%"}} onClick={()=>handleDelete(selectedListing.id)}>Remove listing</button>
+                  </div>
                 ) : (
                   <a href={`https://www.paypal.com/paypalme/grantchaplin/${selectedListing.price}GBP`} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>
                     <button className="paypal-btn">
@@ -1031,6 +1185,14 @@ export default function TutuTrade() {
           </div>
         );
       })()}
+
+      {/* LIGHTBOX */}
+      {lightboxImage && (
+        <div className="lightbox" onClick={() => setLightboxImage(null)}>
+          <button className="lightbox-close" onClick={() => setLightboxImage(null)}>×</button>
+          <img src={lightboxImage} alt="Full size" onClick={e => e.stopPropagation()}/>
+        </div>
+      )}
 
       {/* EDIT AD MODAL */}
       {modal === "editAd" && (
