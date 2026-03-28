@@ -49,9 +49,9 @@ const ADMIN_EMAIL = "grant.chaplin@hotmail.com";
 const SITE_URL = window.location.origin;
 
 const P = {
-  bg:"#0d0a14",surface:"#16111f",card:"#1e1729",border:"#2e2340",
+  bg:"#1a1228",surface:"#231934",card:"#2d2142",border:"#3d2f5c",
   accent:"#c9a96e",accentSoft:"#e8d5aa",pink:"#e8a0b4",
-  text:"#f0eaf8",muted:"#8a7a9e",success:"#6fcf97",admin:"#7c6fe0",
+  text:"#f0eaf8",muted:"#a892c4",success:"#6fcf97",admin:"#9d8fe0",
 };
 
 const PRESET_COLORS = [
@@ -87,7 +87,7 @@ const css = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:${P.bg};color:${P.text};font-family:'Jost',sans-serif;min-height:100vh}
-  .app{min-height:100vh;background:radial-gradient(ellipse at 20% 0%,#1a0e2e 0%,${P.bg} 50%),radial-gradient(ellipse at 80% 100%,#1a0b1e 0%,transparent 50%)}
+  .app{min-height:100vh;background:radial-gradient(ellipse at 20% 0%,#2e1f52 0%,${P.bg} 55%),radial-gradient(ellipse at 80% 100%,#251640 0%,transparent 55%)}
   .header{padding:1.25rem 2rem;border-bottom:1px solid ${P.border};display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;background:rgba(13,10,20,0.88);backdrop-filter:blur(16px)}
   .logo{display:flex;align-items:center;gap:.75rem;cursor:pointer}
   .logo-icon{width:34px;height:34px;background:linear-gradient(135deg,${P.accent},${P.pink});border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1rem}
@@ -482,14 +482,30 @@ export default function TutuTrade() {
   const handleMarkSold = async (id) => {
     await supabase.from("listings").update({ sold: true, sold_at: new Date().toISOString() }).eq("id", id);
     const listing = listings.find(l => l.id === id);
-    if (listing) await sendSoldEmail({ listing, commissionPct });
+    const effectivePct = getCommission(listing?.school_id);
+    if (listing) await sendSoldEmail({ listing, commissionPct: effectivePct });
     await loadListings(); closeModal(); setSuccess("Item marked as sold! Payout email sent to your inbox.");
   };
   const handleMarkUnsold = async (id) => {
     await supabase.from("listings").update({ sold: false, sold_at: null }).eq("id", id);
     await loadListings(); setSuccess("Item relisted!");
   };
-  const handleSaveCommission = async (val) => { setCommissionPct(val); await supabase.from("settings").upsert({ key:"commission_pct", value:String(val) }); };
+  const handleSaveCommission = async (val) => {
+    setCommissionPct(val);
+    await supabase.from("settings").upsert({ key:"commission_pct", value:String(val) }, { onConflict:"key" });
+  };
+
+  const handleSaveSchoolCommission = async (schoolId, val) => {
+    const value = val === "" ? null : parseFloat(val);
+    await supabase.from("schools").update({ commission_pct: value }).eq("id", schoolId);
+    await loadSchools();
+  };
+
+  // Get effective commission for a listing (school rate overrides global)
+  const getCommission = (schoolId) => {
+    const school = schools.find(s => s.id === schoolId);
+    return school?.commission_pct != null ? school.commission_pct : commissionPct;
+  };
 
   const handleAddSchoolAdmin = async () => {
     if (!newSchoolForm.name || !newSchoolForm.code) return;
@@ -576,7 +592,7 @@ export default function TutuTrade() {
   });
 
   const topAd = ads.find(a => a.active && a.slot === "top");
-  const totalRevenue = listings.reduce((s, l) => s + calcFees(l.price, commissionPct).commission, 0);
+  const totalRevenue = listings.reduce((s, l) => s + calcFees(l.price, getCommission(l.school_id)).commission, 0);
   const activeSchoolFilter = filters.school ? getSchool(filters.school) : null;
 
   if (loading) return <div className="app"><style>{css}</style><div className="loading" style={{paddingTop:"5rem"}}>Loading TutuTrade...</div></div>;
@@ -687,6 +703,9 @@ export default function TutuTrade() {
                           <div style={{display:"flex",gap:".5rem",alignItems:"center",flexWrap:"wrap"}}>
                             <span style={{padding:".18rem .55rem",borderRadius:20,fontSize:".65rem",background:hexToRgba(sc,0.12),color:sc,border:`1px solid ${hexToRgba(sc,0.3)}`}}>{s.code}</span>
                             <span style={{fontSize:".72rem",color:P.muted}}>{memberCount} members · {listingCount} listings</span>
+                            <span style={{fontSize:".72rem",color:P.accent}}>
+                              {s.commission_pct != null ? `${s.commission_pct}% commission` : `${commissionPct}% (global rate)`}
+                            </span>
                           </div>
                         </div>
                         <div style={{display:"flex",gap:".4rem",flexWrap:"wrap"}}>
@@ -698,6 +717,25 @@ export default function TutuTrade() {
 
                       {editingSchoolColor === s.id && (
                         <div style={{marginTop:".85rem",paddingTop:".85rem",borderTop:`1px solid ${P.border}`}}>
+                          <div style={{marginBottom:"1rem"}}>
+                            <div className="form-label">Commission rate</div>
+                            <div style={{display:"flex",alignItems:"center",gap:".5rem",marginTop:".35rem"}}>
+                              <input
+                                className="admin-commission-input"
+                                type="number" min="0" max="30" step="0.1"
+                                placeholder={`${commissionPct} (global)`}
+                                value={s.commission_pct ?? ""}
+                                onChange={e => handleSaveSchoolCommission(s.id, e.target.value)}
+                              />
+                              <span style={{fontSize:".8rem",color:P.muted}}>%</span>
+                              {s.commission_pct != null && (
+                                <button className="btn btn-ghost btn-sm" onClick={() => handleSaveSchoolCommission(s.id, "")}>
+                                  Use global rate
+                                </button>
+                              )}
+                            </div>
+                            <div className="form-hint">Leave blank to use the global rate ({commissionPct}%)</div>
+                          </div>
                           <div className="form-label">Choose colour</div>
                           <div className="color-picker-row">
                             {PRESET_COLORS.map(c => (
@@ -836,7 +874,7 @@ export default function TutuTrade() {
                 <table className="admin-table">
                   <thead><tr><th>Item</th><th>Seller</th><th>School</th><th>Price</th><th>Your fee</th><th>Status</th><th></th></tr></thead>
                   <tbody>
-                    {listings.map(l => { const { commission } = calcFees(l.price, commissionPct); const sc = getSchoolColor(l.school_id); return (
+                    {listings.map(l => { const eff = getCommission(l.school_id); const { commission } = calcFees(l.price, eff); const sc = getSchoolColor(l.school_id); return (
                       <tr key={l.id} style={{opacity:l.sold?0.6:1}}>
                         <td>{l.sold && <span style={{fontSize:".65rem",color:"#e07070",marginRight:".4rem"}}>[SOLD]</span>}{l.title}</td><td style={{color:P.muted}}>{l.seller_name}</td>
                         <td><span style={{padding:".18rem .55rem",borderRadius:20,fontSize:".65rem",background:hexToRgba(sc,0.12),color:sc,border:`1px solid ${hexToRgba(sc,0.3)}`}}>{l.school_name}</span></td>
@@ -1115,13 +1153,16 @@ export default function TutuTrade() {
                 <div className="form-group"><label className="form-label">Condition *</label><select className="form-select" value={createForm.condition} onChange={e=>setCreateForm(f=>({...f,condition:e.target.value}))}><option value="">Select...</option>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select></div>
                 <div className="form-group"><label className="form-label">Price (£) *</label><input className="form-input" type="number" min="1" placeholder="25" value={createForm.price} onChange={e=>setCreateForm(f=>({...f,price:e.target.value}))}/></div>
               </div>
-              {createForm.price && !isNaN(createForm.price) && Number(createForm.price) > 0 && (
-                <div className="commission-box">
-                  <div className="commission-row"><span className="commission-label">Listing price</span><span className="commission-value">£{Number(createForm.price).toFixed(2)}</span></div>
-                  <div className="commission-row"><span className="commission-label">Platform fee ({commissionPct}%)</span><span className="commission-value">−£{calcFees(Number(createForm.price),commissionPct).commission}</span></div>
-                  <div className="commission-row total"><span>You receive</span><span>£{calcFees(Number(createForm.price),commissionPct).sellerReceives}</span></div>
-                </div>
-              )}
+              {createForm.price && !isNaN(createForm.price) && Number(createForm.price) > 0 && (() => {
+                const eff = getCommission(createForm.schoolId);
+                return (
+                  <div className="commission-box">
+                    <div className="commission-row"><span className="commission-label">Listing price</span><span className="commission-value">£{Number(createForm.price).toFixed(2)}</span></div>
+                    <div className="commission-row"><span className="commission-label">Platform fee ({eff}%)</span><span className="commission-value">−£{calcFees(Number(createForm.price),eff).commission}</span></div>
+                    <div className="commission-row total"><span>You receive</span><span>£{calcFees(Number(createForm.price),eff).sellerReceives}</span></div>
+                  </div>
+                );
+              })()}
               <div className="form-group"><label className="form-label">Description</label><textarea className="form-textarea" placeholder="Describe the item, any wear, original price..." value={createForm.description} onChange={e=>setCreateForm(f=>({...f,description:e.target.value}))}/></div>
               <div className="form-group">
                 <label className="form-label">Photo</label>
@@ -1135,7 +1176,8 @@ export default function TutuTrade() {
 
       {/* DETAIL MODAL */}
       {modal === "detail" && selectedListing && (() => {
-        const { commission } = calcFees(selectedListing.price, commissionPct);
+        const effectiveCommission = getCommission(selectedListing.school_id);
+        const { commission } = calcFees(selectedListing.price, effectiveCommission);
         const isOwner = user?.email === selectedListing.seller_email;
         const sc = getSchoolColor(selectedListing.school_id);
         return (
@@ -1158,7 +1200,7 @@ export default function TutuTrade() {
                 {!isOwner && (
                   <div className="commission-box">
                     <div className="commission-row"><span className="commission-label">Item price</span><span className="commission-value">£{selectedListing.price}</span></div>
-                    <div className="commission-row"><span className="commission-label">Platform fee ({commissionPct}%)</span><span className="commission-value">£{commission}</span></div>
+                    <div className="commission-row"><span className="commission-label">Platform fee ({effectiveCommission}%)</span><span className="commission-value">£{commission}</span></div>
                     <div className="commission-row total"><span>You pay</span><span>£{selectedListing.price}</span></div>
                     <div style={{fontSize:".67rem",color:P.muted,marginTop:".35rem"}}>Payment is processed securely via PayPal. The seller will receive their payout within 24 hours of sale.</div>
                   </div>
