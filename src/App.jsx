@@ -15,6 +15,35 @@ const P = {
   text:"#f0eaf8",muted:"#8a7a9e",success:"#6fcf97",admin:"#7c6fe0",
 };
 
+const PRESET_COLORS = [
+  // Golds & Warm
+  "#c9a96e","#f0a500","#fb923c","#facc15","#fde68a",
+  // Pinks & Reds
+  "#e8a0b4","#e07070","#f87171","#f472b6","#e879f9",
+  // Purples & Blues
+  "#7c6fe0","#a78bfa","#60a5fa","#56b3e0","#38bdf8",
+  // Greens
+  "#6fcf97","#34d399","#4ade80","#86efac","#a3e635",
+  // Greys & Neutrals
+  "#9ca3af","#6b7280","#4b5563","#d1d5db","#e5e7eb",
+  // Extra
+  "#c084fc","#fb7185","#fbbf24","#2dd4bf","#818cf8",
+];
+
+const hexToRgba = (hex, alpha) => {
+  try {
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  } catch { return `rgba(201,169,110,${alpha})`; }
+};
+
+const calcFees = (price, pct) => {
+  const commission = parseFloat((price * pct / 100).toFixed(2));
+  return { commission, sellerReceives: parseFloat((price - commission).toFixed(2)) };
+};
+
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
@@ -42,18 +71,25 @@ const css = `
   .btn-copy{background:rgba(201,169,110,.1);color:${P.accent};border:1px solid rgba(201,169,110,.25);font-size:.72rem;padding:.3rem .7rem;border-radius:5px;cursor:pointer;font-family:'Jost',sans-serif;transition:all .2s}
   .btn-copy:hover{background:rgba(201,169,110,.2)}
   .btn-warning{background:rgba(255,180,0,.1);color:#ffb400;border:1px solid rgba(255,180,0,.3);font-size:.75rem;padding:.4rem .9rem}
-  .btn-warning:hover{background:rgba(255,180,0,.18)}
   .main{max-width:1200px;margin:0 auto;padding:2rem}
   .layout{display:grid;grid-template-columns:1fr 220px;gap:2rem;align-items:start}
   @media(max-width:800px){.layout{grid-template-columns:1fr}}
+
+  /* HERO */
   .hero{text-align:center;padding:3.5rem 2rem 2.5rem;position:relative}
   .hero::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:600px;height:2px;background:linear-gradient(90deg,transparent,${P.accent},transparent)}
   .hero-eyebrow{font-size:.68rem;letter-spacing:.25em;text-transform:uppercase;color:${P.accent};margin-bottom:.85rem}
   .hero-title{font-family:'Playfair Display',serif;font-size:clamp(2rem,5vw,3.2rem);line-height:1.15;color:${P.text};margin-bottom:.85rem}
   .hero-title em{font-style:italic;color:${P.accentSoft}}
   .hero-sub{color:${P.muted};font-size:.92rem;font-weight:300;max-width:460px;margin:0 auto 1.5rem;line-height:1.7}
-  .school-badges{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin-bottom:1.5rem}
-  .school-badge{display:inline-flex;align-items:center;gap:.5rem;padding:.35rem .9rem;background:rgba(201,169,110,.1);border:1px solid rgba(201,169,110,.3);border-radius:20px;font-size:.78rem;color:${P.accent}}
+  .school-badges{display:flex;gap:.65rem;flex-wrap:wrap;justify-content:center;margin-bottom:1rem}
+
+  /* SCHOOL FILTER BANNER */
+  .school-filter-banner{padding:.85rem 1.25rem;border-radius:10px;margin-bottom:1.5rem;display:flex;align-items:center;justify-content:space-between;gap:.75rem}
+  .school-filter-banner-name{font-family:'Playfair Display',serif;font-size:1.05rem}
+  .school-filter-banner-sub{font-size:.75rem;margin-top:.15rem;opacity:.8}
+
+  /* ADS */
   .ad-banner{padding:1rem 1.5rem;background:${P.surface};border:1px solid ${P.border};border-radius:10px;margin-bottom:1.75rem;display:flex;align-items:center;gap:1.25rem;text-decoration:none;transition:border-color .2s;position:relative}
   .ad-banner:hover{border-color:rgba(201,169,110,.3)}
   .ad-banner-label{position:absolute;top:.45rem;right:.6rem;font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:${P.muted};opacity:.7}
@@ -70,19 +106,25 @@ const css = `
   .ad-sidebar-card strong{display:block;font-size:.82rem;color:${P.text};margin-bottom:.2rem}
   .ad-sidebar-card span{font-size:.72rem;color:${P.muted};line-height:1.4}
   .ad-sidebar-cta{display:inline-block;margin-top:.6rem;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:${P.accent}}
+
+  /* FILTERS */
   .filters{display:flex;gap:.65rem;flex-wrap:wrap;margin-bottom:1.5rem;padding:1.1rem;background:${P.surface};border:1px solid ${P.border};border-radius:10px}
   .filter-select,.filter-input{padding:.5rem .85rem;background:${P.card};border:1px solid ${P.border};border-radius:6px;color:${P.text};font-family:'Jost',sans-serif;font-size:.8rem;outline:none;transition:border-color .2s;flex:1;min-width:130px}
   .filter-input{min-width:180px}
   .filter-select:focus,.filter-input:focus{border-color:${P.accent}}
   .filter-select option{background:${P.card}}
+
+  /* NAV */
   .nav-pills{display:flex;gap:.5rem;margin-bottom:1.25rem;flex-wrap:wrap}
   .nav-pill{padding:.45rem 1rem;border-radius:20px;background:transparent;border:1px solid ${P.border};color:${P.muted};font-family:'Jost',sans-serif;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .2s}
   .nav-pill.active{background:rgba(201,169,110,.12);border-color:${P.accent};color:${P.accent}}
+
+  /* GRID & CARDS */
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1.1rem}
   .listing-count{font-size:.78rem;color:${P.muted};margin-bottom:1.1rem}
   .listing-count strong{color:${P.accentSoft}}
   .card{background:${P.card};border:1px solid ${P.border};border-radius:12px;overflow:hidden;transition:all .25s;cursor:pointer}
-  .card:hover{transform:translateY(-3px);border-color:rgba(201,169,110,.4);box-shadow:0 8px 32px rgba(0,0,0,.4)}
+  .card:hover{transform:translateY(-3px);box-shadow:0 8px 32px rgba(0,0,0,.4)}
   .card-image{width:100%;height:170px;background:linear-gradient(135deg,#1e1729,#2a1f3d);display:flex;align-items:center;justify-content:center;font-size:3.2rem;position:relative;overflow:hidden}
   .card-image img{width:100%;height:100%;object-fit:cover}
   .card-image::after{content:'';position:absolute;bottom:0;left:0;right:0;height:40px;background:linear-gradient(transparent,${P.card})}
@@ -92,12 +134,15 @@ const css = `
   .condition-good{background:rgba(232,160,180,.15);color:${P.pink};border:1px solid rgba(232,160,180,.25)}
   .condition-worn{background:rgba(138,122,158,.15);color:${P.muted};border:1px solid rgba(138,122,158,.25)}
   .card-body{padding:.9rem}
-  .card-style-tag{font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;color:${P.accent};margin-bottom:.3rem}
+  .card-style-tag{font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;margin-bottom:.3rem}
   .card-title{font-family:'Playfair Display',serif;font-size:1rem;margin-bottom:.35rem;color:${P.text};line-height:1.3}
   .card-meta{font-size:.75rem;color:${P.muted};margin-bottom:.65rem}
   .card-footer{display:flex;align-items:center;justify-content:space-between;padding-top:.65rem;border-top:1px solid ${P.border}}
   .price{font-family:'Playfair Display',serif;font-size:1.25rem;color:${P.accentSoft}}
   .price span{font-size:.72rem;color:${P.muted};font-family:'Jost',sans-serif}
+  .school-stripe{height:3px;width:100%}
+
+  /* MODALS */
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem;animation:fadeIn .2s ease}
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
   @keyframes slideUp{from{transform:translateY(18px);opacity:0}to{transform:translateY(0);opacity:1}}
@@ -143,6 +188,8 @@ const css = `
   .upload-area:hover{border-color:${P.accent};color:${P.accent}}
   .upload-area input{display:none}
   .upload-preview{width:100%;height:110px;object-fit:cover;border-radius:7px;margin-top:.5rem}
+
+  /* ADMIN */
   .admin-section{margin-bottom:2rem}
   .admin-section-title{font-family:'Playfair Display',serif;font-size:1.05rem;color:#a99ef0;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid rgba(124,111,224,.2)}
   .admin-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.75rem}
@@ -159,16 +206,6 @@ const css = `
   .ad-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block;margin-right:.4rem}
   .ad-dot.active{background:${P.success}}
   .ad-dot.inactive{background:${P.muted}}
-  .empty-state{grid-column:1/-1;text-align:center;padding:3.5rem 2rem;color:${P.muted}}
-  .empty-state-icon{font-size:2.8rem;margin-bottom:.85rem;opacity:.5}
-  .empty-state h3{font-family:'Playfair Display',serif;color:${P.text};margin-bottom:.4rem}
-  .success-banner{padding:.7rem 1rem;background:rgba(111,207,151,.1);border:1px solid rgba(111,207,151,.3);border-radius:7px;color:${P.success};font-size:.8rem;margin-bottom:1rem;text-align:center;cursor:pointer}
-  .error-banner{padding:.7rem 1rem;background:rgba(224,112,112,.1);border:1px solid rgba(224,112,112,.3);border-radius:7px;color:#e07070;font-size:.8rem;margin-bottom:1rem;text-align:center}
-  .loading{text-align:center;padding:3rem;color:${P.muted};font-size:.88rem}
-  .text-link{background:none;border:none;color:${P.accent};cursor:pointer;text-decoration:underline;font:inherit;font-size:.76rem}
-  .profile-school-item{display:flex;align-items:center;justify-content:space-between;padding:.7rem .85rem;background:${P.card};border:1px solid ${P.border};border-radius:8px;margin-bottom:.5rem}
-  .profile-school-name{font-size:.85rem;color:${P.text}}
-  .profile-school-code{font-size:.7rem;color:${P.muted};margin-top:.15rem}
   .admin-tabs{display:flex;gap:.5rem;margin-bottom:1.5rem;flex-wrap:wrap}
   .admin-tab{padding:.45rem 1rem;border-radius:20px;background:transparent;border:1px solid rgba(124,111,224,.25);color:${P.muted};font-family:'Jost',sans-serif;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .2s}
   .admin-tab.active{background:rgba(124,111,224,.15);border-color:${P.admin};color:${P.admin}}
@@ -176,20 +213,25 @@ const css = `
   .user-card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:.75rem}
   .user-card-name{font-size:.92rem;color:${P.text};font-weight:500}
   .user-card-email{font-size:.73rem;color:${P.muted};margin-top:.15rem}
-  .user-card-actions{display:flex;gap:.4rem;flex-wrap:wrap}
-  .user-schools-row{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
   .confirm-box{padding:.85rem;background:rgba(224,112,112,.08);border:1px solid rgba(224,112,112,.25);border-radius:8px;margin-top:.75rem;font-size:.82rem;color:${P.muted}}
   .confirm-box strong{color:#e07070;display:block;margin-bottom:.5rem}
   .confirm-actions{display:flex;gap:.5rem;margin-top:.75rem}
+  .color-swatch{width:26px;height:26px;border-radius:50%;border:2px solid rgba(255,255,255,.1);cursor:pointer;flex-shrink:0;transition:transform .15s}
+  .color-swatch:hover{transform:scale(1.18)}
+  .color-picker-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem}
+  .profile-school-item{display:flex;align-items:center;justify-content:space-between;padding:.7rem .85rem;border-radius:8px;margin-bottom:.5rem;border-left:4px solid}
+
+  /* MISC */
+  .empty-state{grid-column:1/-1;text-align:center;padding:3.5rem 2rem;color:${P.muted}}
+  .empty-state-icon{font-size:2.8rem;margin-bottom:.85rem;opacity:.5}
+  .empty-state h3{font-family:'Playfair Display',serif;color:${P.text};margin-bottom:.4rem}
+  .success-banner{padding:.7rem 1rem;background:rgba(111,207,151,.1);border:1px solid rgba(111,207,151,.3);border-radius:7px;color:${P.success};font-size:.8rem;margin-bottom:1rem;text-align:center;cursor:pointer}
+  .loading{text-align:center;padding:3rem;color:${P.muted};font-size:.88rem}
+  .text-link{background:none;border:none;color:${P.accent};cursor:pointer;text-decoration:underline;font:inherit;font-size:.76rem}
   ::-webkit-scrollbar{width:5px}
   ::-webkit-scrollbar-track{background:${P.bg}}
   ::-webkit-scrollbar-thumb{background:${P.border};border-radius:3px}
 `;
-
-const calcFees = (price, pct) => {
-  const commission = parseFloat((price * pct / 100).toFixed(2));
-  return { commission, sellerReceives: parseFloat((price - commission).toFixed(2)) };
-};
 
 function AdBanner({ ad }) {
   if (!ad || !ad.active) return null;
@@ -244,21 +286,20 @@ export default function TutuTrade() {
   const [createError, setCreateError] = useState("");
   const [editingAd, setEditingAd] = useState(null);
   const [adForm, setAdForm] = useState({ title:"", tagline:"", url:"", slot:"top", active:true, image:null });
-  const [newSchoolForm, setNewSchoolForm] = useState({ name:"", code:"" });
+  const [newSchoolForm, setNewSchoolForm] = useState({ name:"", code:"", color:"#c9a96e" });
+  const [editingSchoolColor, setEditingSchoolColor] = useState(null);
   const [addSchoolCode, setAddSchoolCode] = useState("");
   const [addSchoolError, setAddSchoolError] = useState("");
   const [copiedLink, setCopiedLink] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmDeleteSchool, setConfirmDeleteSchool] = useState(null);
   const [addUserSchoolId, setAddUserSchoolId] = useState("");
   const [moveUserSchool, setMoveUserSchool] = useState({ fromId:"", toId:"" });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const joinCode = params.get("join");
-    if (joinCode) {
-      setAuthForm(f => ({ ...f, schoolCode: joinCode.toUpperCase() }));
-      setAuthTab("register"); setModal("auth");
-    }
+    if (joinCode) { setAuthForm(f => ({ ...f, schoolCode: joinCode.toUpperCase() })); setAuthTab("register"); setModal("auth"); }
   }, []);
 
   useEffect(() => {
@@ -286,7 +327,15 @@ export default function TutuTrade() {
   const loadAllUserSchools = async () => { const { data } = await supabase.from("user_schools").select("*"); if (data) setAllUserSchools(data); };
   const loadAllUsers = async () => { const { data } = await supabase.from("user_profiles").select("*"); if (data) setAllUsers(data); };
 
-  const closeModal = () => { setModal(null); setAuthError(""); setCreateError(""); setAddSchoolError(""); setEditingAd(null); setSelectedUser(null); setConfirmDelete(null); setAddUserSchoolId(""); setMoveUserSchool({fromId:"",toId:""}); };
+  const closeModal = () => { setModal(null); setAuthError(""); setCreateError(""); setAddSchoolError(""); setEditingAd(null); setSelectedUser(null); setConfirmDelete(null); setConfirmDeleteSchool(null); setAddUserSchoolId(""); setMoveUserSchool({fromId:"",toId:""}); };
+  const getSchoolColor = (schoolId) => schools.find(s => s.id === schoolId)?.color || P.accent;
+  const getSchool = (schoolId) => schools.find(s => s.id === schoolId);
+
+  const handleClickSchoolBadge = (schoolId) => {
+    setFilters(f => ({ ...f, school: f.school === schoolId ? "" : schoolId }));
+    // Scroll to listings
+    setTimeout(() => document.querySelector(".filters")?.scrollIntoView({ behavior:"smooth", block:"start" }), 100);
+  };
 
   const handleRegister = async () => {
     setAuthError("");
@@ -350,15 +399,31 @@ export default function TutuTrade() {
   const handleDelete = async (id) => { await supabase.from("listings").delete().eq("id", id); await loadListings(); closeModal(); };
   const handleSaveCommission = async (val) => { setCommissionPct(val); await supabase.from("settings").upsert({ key:"commission_pct", value:String(val) }); };
 
-  // ── ADMIN USER MANAGEMENT ──
+  const handleAddSchoolAdmin = async () => {
+    if (!newSchoolForm.name || !newSchoolForm.code) return;
+    const { error } = await supabase.from("schools").insert([{ name: newSchoolForm.name, code: newSchoolForm.code.toUpperCase(), color: newSchoolForm.color }]);
+    if (error) return setSuccess("Error: that code may already exist.");
+    await loadSchools(); setNewSchoolForm({ name:"", code:"", color:"#c9a96e" }); setSuccess("School added!");
+  };
+
+  const handleUpdateSchoolColor = async (schoolId, color) => {
+    await supabase.from("schools").update({ color }).eq("id", schoolId);
+    await loadSchools();
+  };
+
+  const handleDeleteSchool = async (school) => {
+    await supabase.from("schools").delete().eq("id", school.id);
+    await loadSchools(); await loadAllUserSchools(); await loadListings();
+    setConfirmDeleteSchool(null); setSuccess(`${school.name} removed.`);
+  };
+
   const handleAdminAddUserToSchool = async () => {
     if (!selectedUser || !addUserSchoolId) return;
     const school = schools.find(s => s.id === addUserSchoolId);
     if (!school) return;
-    const already = allUserSchools.find(us => us.user_email === selectedUser.email && us.school_id === school.id);
-    if (already) { setSuccess("User is already in that school."); return; }
+    if (allUserSchools.find(us => us.user_email === selectedUser.email && us.school_id === school.id)) { setSuccess("User is already in that school."); return; }
     await supabase.from("user_schools").insert([{ user_email: selectedUser.email, school_id: school.id, school_name: school.name, school_code: school.code }]);
-    await loadAllUserSchools(); setAddUserSchoolId(""); setSuccess(`${selectedUser.full_name || selectedUser.email} added to ${school.name}`);
+    await loadAllUserSchools(); setAddUserSchoolId(""); setSuccess(`Added to ${school.name}`);
   };
 
   const handleAdminRemoveUserFromSchool = async (userEmail, schoolId) => {
@@ -379,9 +444,7 @@ export default function TutuTrade() {
     if (!confirmDelete) return;
     await supabase.from("user_schools").delete().eq("user_email", confirmDelete.email);
     await supabase.from("listings").delete().eq("seller_email", confirmDelete.email);
-    const { error } = await supabase.auth.admin.deleteUser(confirmDelete.id);
-    if (error) { setSuccess("Note: user data cleared but account deletion requires service role key. Contact Supabase dashboard to fully remove."); }
-    else { setSuccess(`${confirmDelete.full_name || confirmDelete.email} deleted.`); }
+    setSuccess(`${confirmDelete.full_name || confirmDelete.email} removed.`);
     await loadAllUsers(); await loadAllUserSchools(); await loadListings();
     setConfirmDelete(null); setSelectedUser(null); setModal(null);
   };
@@ -402,15 +465,6 @@ export default function TutuTrade() {
   const toggleAd = async (id, current) => { await supabase.from("ads").update({ active: !current }).eq("id", id); await loadAds(); };
   const deleteAd = async (id) => { await supabase.from("ads").delete().eq("id", id); await loadAds(); };
 
-  const handleAddSchoolAdmin = async () => {
-    if (!newSchoolForm.name || !newSchoolForm.code) return;
-    const { error } = await supabase.from("schools").insert([{ name: newSchoolForm.name, code: newSchoolForm.code.toUpperCase() }]);
-    if (error) return setSuccess("Error: that code may already exist.");
-    await loadSchools(); setNewSchoolForm({ name:"", code:"" }); setSuccess("School added!");
-  };
-
-  const handleDeleteSchool = async (id) => { await supabase.from("schools").delete().eq("id", id); await loadSchools(); };
-
   const copyShareLink = (code) => {
     navigator.clipboard.writeText(`${SITE_URL}?join=${code}`);
     setCopiedLink(code); setTimeout(() => setCopiedLink(null), 2000);
@@ -430,14 +484,17 @@ export default function TutuTrade() {
 
   const topAd = ads.find(a => a.active && a.slot === "top");
   const totalRevenue = listings.reduce((s, l) => s + calcFees(l.price, commissionPct).commission, 0);
+  const activeSchoolFilter = filters.school ? getSchool(filters.school) : null;
 
   if (loading) return <div className="app"><style>{css}</style><div className="loading" style={{paddingTop:"5rem"}}>Loading TutuTrade...</div></div>;
 
   return (
     <div className="app">
       <style>{css}</style>
+
+      {/* HEADER */}
       <header className="header">
-        <div className="logo" onClick={() => setView("browse")}>
+        <div className="logo" onClick={() => { setView("browse"); setFilters(f=>({...f,school:""})); }}>
           <div className="logo-icon">🩰</div>
           <div><div className="logo-text">TutuTrade</div><div className="logo-sub">Buy & Sell Dancewear</div></div>
         </div>
@@ -462,7 +519,7 @@ export default function TutuTrade() {
       <div className="main">
         {success && <div className="success-banner" onClick={() => setSuccess("")}>✓ {success}</div>}
 
-        {/* ── ADMIN VIEW ── */}
+        {/* ── ADMIN ── */}
         {view === "admin" && isAdmin ? (
           <div>
             <div style={{marginBottom:"1.5rem"}}>
@@ -475,7 +532,6 @@ export default function TutuTrade() {
               <div className="admin-stat"><div className="admin-stat-value">{commissionPct}%</div><div className="admin-stat-label">Commission</div></div>
               <div className="admin-stat"><div className="admin-stat-value">£{totalRevenue.toFixed(2)}</div><div className="admin-stat-label">Est. Revenue</div></div>
             </div>
-
             <div className="admin-tabs">
               {["overview","schools","users","ads","listings"].map(t => (
                 <button key={t} className={`admin-tab ${adminTab===t?"active":""}`} onClick={() => setAdminTab(t)}>
@@ -484,7 +540,6 @@ export default function TutuTrade() {
               ))}
             </div>
 
-            {/* OVERVIEW */}
             {adminTab === "overview" && (
               <div className="admin-section">
                 <div className="admin-section-title">💰 Commission Rate</div>
@@ -499,39 +554,83 @@ export default function TutuTrade() {
               </div>
             )}
 
-            {/* SCHOOLS */}
             {adminTab === "schools" && (
               <div className="admin-section">
                 <div className="admin-section-title">🏫 Dance Schools</div>
-                <div style={{display:"flex",gap:".65rem",marginBottom:"1rem",flexWrap:"wrap"}}>
-                  <input className="filter-input" placeholder="School name" value={newSchoolForm.name} onChange={e=>setNewSchoolForm(f=>({...f,name:e.target.value}))} style={{flex:2}}/>
-                  <input className="filter-input" placeholder="School code e.g. DANCE2024" value={newSchoolForm.code} onChange={e=>setNewSchoolForm(f=>({...f,code:e.target.value}))} style={{flex:1}}/>
-                  <button className="btn btn-primary btn-sm" onClick={handleAddSchoolAdmin}>+ Add School</button>
+                <div style={{padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10,marginBottom:"1rem"}}>
+                  <div style={{display:"flex",gap:".65rem",flexWrap:"wrap",alignItems:"flex-end"}}>
+                    <div style={{flex:2}}>
+                      <div className="form-label">School name</div>
+                      <input className="filter-input" placeholder="e.g. Starlight Dance Academy" value={newSchoolForm.name} onChange={e=>setNewSchoolForm(f=>({...f,name:e.target.value}))}/>
+                    </div>
+                    <div style={{flex:1}}>
+                      <div className="form-label">School code</div>
+                      <input className="filter-input" placeholder="e.g. DANCE2024" value={newSchoolForm.code} onChange={e=>setNewSchoolForm(f=>({...f,code:e.target.value}))}/>
+                    </div>
+                  </div>
+                  <div style={{marginTop:".75rem"}}>
+                    <div className="form-label">School colour</div>
+                    <div className="color-picker-row">
+                      {PRESET_COLORS.map(c => (
+                        <div key={c} className="color-swatch" style={{background:c,outline:newSchoolForm.color===c?`2px solid white`:"2px solid transparent"}} onClick={() => setNewSchoolForm(f=>({...f,color:c}))}/>
+                      ))}
+                    </div>
+                  </div>
+                  <button className="btn btn-primary btn-sm" style={{marginTop:"1rem"}} onClick={handleAddSchoolAdmin}>+ Add School</button>
                 </div>
-                <table className="admin-table">
-                  <thead><tr><th>School</th><th>Code</th><th>Members</th><th>Listings</th><th>Signup Link</th><th></th></tr></thead>
-                  <tbody>
-                    {schools.map(s => {
-                      const memberCount = allUserSchools.filter(us => us.school_id === s.id).length;
-                      const listingCount = listings.filter(l => l.school_id === s.id).length;
-                      return (
-                        <tr key={s.id}>
-                          <td>{s.name}</td>
-                          <td><span className="tag tag-style">{s.code}</span></td>
-                          <td style={{color:P.muted}}>{memberCount}</td>
-                          <td style={{color:P.muted}}>{listingCount}</td>
-                          <td><button className="btn-copy" onClick={() => copyShareLink(s.code)}>{copiedLink===s.code?"✓ Copied":"Copy link"}</button></td>
-                          <td><button className="btn btn-danger btn-sm" onPointerDown={() => handleDeleteSchool(s.id)}>Remove</button></td>
-                        </tr>
-                      );
-                    })}
-                    {!schools.length && <tr><td colSpan={6} style={{color:P.muted,textAlign:"center",padding:"1.5rem"}}>No schools yet</td></tr>}
-                  </tbody>
-                </table>
+
+                {schools.map(s => {
+                  const memberCount = allUserSchools.filter(us => us.school_id === s.id).length;
+                  const listingCount = listings.filter(l => l.school_id === s.id).length;
+                  const sc = s.color || P.accent;
+                  return (
+                    <div key={s.id} style={{padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10,marginBottom:".75rem",borderLeft:`4px solid ${sc}`}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:".5rem"}}>
+                        <div>
+                          <div style={{fontWeight:500,color:P.text,marginBottom:".25rem",display:"flex",alignItems:"center",gap:".5rem"}}>
+                            <span style={{width:10,height:10,borderRadius:"50%",background:sc,display:"inline-block"}}/>
+                            {s.name}
+                          </div>
+                          <div style={{display:"flex",gap:".5rem",alignItems:"center",flexWrap:"wrap"}}>
+                            <span style={{padding:".18rem .55rem",borderRadius:20,fontSize:".65rem",background:hexToRgba(sc,0.12),color:sc,border:`1px solid ${hexToRgba(sc,0.3)}`}}>{s.code}</span>
+                            <span style={{fontSize:".72rem",color:P.muted}}>{memberCount} members · {listingCount} listings</span>
+                          </div>
+                        </div>
+                        <div style={{display:"flex",gap:".4rem",flexWrap:"wrap"}}>
+                          <button className="btn-copy" onClick={() => copyShareLink(s.code)}>{copiedLink===s.code?"✓ Copied":"Copy link"}</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => setEditingSchoolColor(editingSchoolColor===s.id?null:s.id)}>🎨 Colour</button>
+                          <button className="btn btn-danger btn-sm" onClick={() => setConfirmDeleteSchool(s)}>Remove</button>
+                        </div>
+                      </div>
+
+                      {editingSchoolColor === s.id && (
+                        <div style={{marginTop:".85rem",paddingTop:".85rem",borderTop:`1px solid ${P.border}`}}>
+                          <div className="form-label">Choose colour</div>
+                          <div className="color-picker-row">
+                            {PRESET_COLORS.map(c => (
+                              <div key={c} className="color-swatch" style={{background:c,outline:s.color===c?`2px solid white`:"2px solid transparent"}} onClick={() => handleUpdateSchoolColor(s.id, c)}/>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {confirmDeleteSchool?.id === s.id && (
+                        <div className="confirm-box">
+                          <strong>⚠ Remove {s.name}?</strong>
+                          This will delete all {listingCount} listing{listingCount!==1?"s":""} and remove {memberCount} member{memberCount!==1?"s":""} from this school. Cannot be undone.
+                          <div className="confirm-actions">
+                            <button className="btn btn-danger btn-sm" onClick={() => handleDeleteSchool(s)}>Yes, remove</button>
+                            <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDeleteSchool(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {!schools.length && <p style={{color:P.muted,fontSize:".84rem"}}>No schools yet.</p>}
               </div>
             )}
 
-            {/* USERS */}
             {adminTab === "users" && (
               <div className="admin-section">
                 <div className="admin-section-title">👥 Users ({allUsers.length})</div>
@@ -543,34 +642,28 @@ export default function TutuTrade() {
                       <div className="user-card-header">
                         <div>
                           <div className="user-card-name">{u.full_name || "No name"} {u.email === ADMIN_EMAIL && <span style={{fontSize:".65rem",color:P.admin,marginLeft:".4rem"}}>ADMIN</span>}</div>
-                          <div className="user-card-email">{u.email}</div>
-                          <div style={{fontSize:".7rem",color:P.muted,marginTop:".2rem"}}>Joined {new Date(u.created_at).toLocaleDateString("en-GB")}</div>
+                          <div style={{fontSize:".73rem",color:P.muted}}>{u.email}</div>
+                          <div style={{fontSize:".7rem",color:P.muted,marginTop:".15rem"}}>Joined {new Date(u.created_at).toLocaleDateString("en-GB")}</div>
                         </div>
-                        <div className="user-card-actions">
-                          <button className="btn btn-ghost btn-sm" onClick={() => setSelectedUser(isExpanded ? null : u)}>
-                            {isExpanded ? "Close" : "Manage"}
-                          </button>
-                        </div>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setSelectedUser(isExpanded?null:u)}>{isExpanded?"Close":"Manage"}</button>
                       </div>
-
-                      <div className="user-schools-row">
-                        <span style={{fontSize:".7rem",color:P.muted,marginRight:".3rem"}}>Schools:</span>
-                        {uSchools.map(us => (
-                          <div key={us.id} style={{display:"flex",alignItems:"center",gap:".2rem"}}>
-                            <span className="tag tag-style" style={{fontSize:".62rem"}}>{us.school_name}</span>
-                            {isExpanded && <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".8rem",lineHeight:1}} onClick={() => handleAdminRemoveUserFromSchool(u.email, us.school_id)} title="Remove from school">×</button>}
-                          </div>
-                        ))}
+                      <div style={{display:"flex",gap:".4rem",flexWrap:"wrap",alignItems:"center"}}>
+                        <span style={{fontSize:".7rem",color:P.muted}}>Schools:</span>
+                        {uSchools.map(us => {
+                          const sc = getSchoolColor(us.school_id);
+                          return (
+                            <div key={us.id} style={{display:"flex",alignItems:"center",gap:".2rem"}}>
+                              <span style={{padding:".18rem .55rem",borderRadius:20,fontSize:".65rem",background:hexToRgba(sc,0.12),color:sc,border:`1px solid ${hexToRgba(sc,0.3)}`}}>{us.school_name}</span>
+                              {isExpanded && <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".8rem",lineHeight:1}} onClick={() => handleAdminRemoveUserFromSchool(u.email, us.school_id)}>×</button>}
+                            </div>
+                          );
+                        })}
                         {!uSchools.length && <span style={{fontSize:".75rem",color:P.muted}}>No schools</span>}
                       </div>
-
-                      {/* EXPANDED MANAGEMENT */}
                       {isExpanded && (
                         <div style={{marginTop:"1rem",paddingTop:"1rem",borderTop:`1px solid ${P.border}`}}>
-
-                          {/* Add to school */}
                           <div style={{marginBottom:"1rem"}}>
-                            <div style={{fontSize:".72rem",textTransform:"uppercase",letterSpacing:".08em",color:P.muted,marginBottom:".5rem"}}>Add to school</div>
+                            <div className="form-label">Add to school</div>
                             <div style={{display:"flex",gap:".5rem"}}>
                               <select className="form-select" style={{flex:1}} value={addUserSchoolId} onChange={e=>setAddUserSchoolId(e.target.value)}>
                                 <option value="">Select school...</option>
@@ -579,42 +672,30 @@ export default function TutuTrade() {
                               <button className="btn btn-primary btn-sm" onClick={handleAdminAddUserToSchool}>Add</button>
                             </div>
                           </div>
-
-                          {/* Move between schools */}
                           {uSchools.length > 0 && (
                             <div style={{marginBottom:"1rem"}}>
-                              <div style={{fontSize:".72rem",textTransform:"uppercase",letterSpacing:".08em",color:P.muted,marginBottom:".5rem"}}>Move to different school</div>
+                              <div className="form-label">Move to different school</div>
                               <div style={{display:"flex",gap:".5rem",flexWrap:"wrap"}}>
                                 <select className="form-select" style={{flex:1}} value={moveUserSchool.fromId} onChange={e=>setMoveUserSchool(f=>({...f,fromId:e.target.value}))}>
-                                  <option value="">From school...</option>
+                                  <option value="">From...</option>
                                   {uSchools.map(us => <option key={us.school_id} value={us.school_id}>{us.school_name}</option>)}
                                 </select>
                                 <select className="form-select" style={{flex:1}} value={moveUserSchool.toId} onChange={e=>setMoveUserSchool(f=>({...f,toId:e.target.value}))}>
-                                  <option value="">To school...</option>
+                                  <option value="">To...</option>
                                   {schools.filter(s => !uSchools.find(us => us.school_id === s.id)).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                 </select>
                                 <button className="btn btn-ghost btn-sm" onClick={handleAdminMoveUserSchool}>Move</button>
                               </div>
                             </div>
                           )}
-
-                          {/* Reset password & Delete */}
                           <div style={{display:"flex",gap:".5rem",flexWrap:"wrap"}}>
-                            <button className="btn btn-warning btn-sm" onClick={() => handleAdminResetPassword(u.email)}>
-                              ✉ Send password reset
-                            </button>
-                            {u.email !== ADMIN_EMAIL && (
-                              <button className="btn btn-danger btn-sm" onClick={() => setConfirmDelete(u)}>
-                                🗑 Delete user
-                              </button>
-                            )}
+                            <button className="btn btn-warning btn-sm" onClick={() => handleAdminResetPassword(u.email)}>✉ Send password reset</button>
+                            {u.email !== ADMIN_EMAIL && <button className="btn btn-danger btn-sm" onClick={() => setConfirmDelete(u)}>🗑 Delete user</button>}
                           </div>
-
-                          {/* Confirm delete */}
                           {confirmDelete?.id === u.id && (
                             <div className="confirm-box">
-                              <strong>⚠ Are you sure you want to delete {confirmDelete.full_name || confirmDelete.email}?</strong>
-                              This will remove their account, school memberships, and all their listings. This cannot be undone.
+                              <strong>⚠ Delete {confirmDelete.full_name || confirmDelete.email}?</strong>
+                              Removes their account, school memberships and all listings. Cannot be undone.
                               <div className="confirm-actions">
                                 <button className="btn btn-danger btn-sm" onClick={handleAdminDeleteUser}>Yes, delete</button>
                                 <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(null)}>Cancel</button>
@@ -630,7 +711,6 @@ export default function TutuTrade() {
               </div>
             )}
 
-            {/* ADS */}
             {adminTab === "ads" && (
               <div className="admin-section">
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
@@ -657,19 +737,18 @@ export default function TutuTrade() {
               </div>
             )}
 
-            {/* LISTINGS */}
             {adminTab === "listings" && (
               <div className="admin-section">
                 <div className="admin-section-title">📋 All Listings</div>
                 <table className="admin-table">
                   <thead><tr><th>Item</th><th>Seller</th><th>School</th><th>Price</th><th>Your fee</th><th></th></tr></thead>
                   <tbody>
-                    {listings.map(l => { const { commission } = calcFees(l.price, commissionPct); return (
+                    {listings.map(l => { const { commission } = calcFees(l.price, commissionPct); const sc = getSchoolColor(l.school_id); return (
                       <tr key={l.id}>
                         <td>{l.title}</td><td style={{color:P.muted}}>{l.seller_name}</td>
-                        <td style={{color:P.muted,fontSize:".73rem"}}>{l.school_name}</td>
+                        <td><span style={{padding:".18rem .55rem",borderRadius:20,fontSize:".65rem",background:hexToRgba(sc,0.12),color:sc,border:`1px solid ${hexToRgba(sc,0.3)}`}}>{l.school_name}</span></td>
                         <td>£{l.price}</td><td style={{color:P.accentSoft}}>£{commission}</td>
-                        <td><button className="btn btn-danger btn-sm" onPointerDown={() => handleDelete(l.id)}>Remove</button></td>
+                        <td><button className="btn btn-danger btn-sm" onClick={() => handleDelete(l.id)}>Remove</button></td>
                       </tr>
                     );})}
                     {!listings.length && <tr><td colSpan={6} style={{color:P.muted,textAlign:"center",padding:"1.5rem"}}>No listings</td></tr>}
@@ -687,17 +766,20 @@ export default function TutuTrade() {
             </div>
             <div style={{maxWidth:520}}>
               <div style={{marginBottom:"1.5rem"}}>
-                <div style={{fontSize:".72rem",textTransform:"uppercase",letterSpacing:".1em",color:P.muted,marginBottom:".75rem"}}>My Dance Schools</div>
-                {userSchools.map(us => (
-                  <div key={us.id} className="profile-school-item">
-                    <div><div className="profile-school-name">{us.school_name}</div><div className="profile-school-code">Code: {us.school_code}</div></div>
-                    {userSchools.length > 1 && <button className="btn btn-danger btn-sm" onClick={() => handleLeaveSchool(us.school_id)}>Leave</button>}
-                  </div>
-                ))}
+                <div className="form-label" style={{marginBottom:".75rem"}}>My Dance Schools</div>
+                {userSchools.map(us => {
+                  const sc = getSchoolColor(us.school_id);
+                  return (
+                    <div key={us.id} className="profile-school-item" style={{background:hexToRgba(sc,0.06),borderColor:P.border,borderLeftColor:sc}}>
+                      <div><div style={{fontSize:".85rem",color:P.text}}>{us.school_name}</div><div style={{fontSize:".7rem",color:P.muted,marginTop:".15rem"}}>Code: {us.school_code}</div></div>
+                      {userSchools.length > 1 && <button className="btn btn-danger btn-sm" onClick={() => handleLeaveSchool(us.school_id)}>Leave</button>}
+                    </div>
+                  );
+                })}
                 {!userSchools.length && <p style={{color:P.muted,fontSize:".84rem"}}>You're not in any schools yet.</p>}
               </div>
               <div style={{padding:"1rem",background:P.surface,border:`1px solid ${P.border}`,borderRadius:10}}>
-                <div style={{fontSize:".72rem",textTransform:"uppercase",letterSpacing:".1em",color:P.muted,marginBottom:".75rem"}}>Join Another School</div>
+                <div className="form-label" style={{marginBottom:".75rem"}}>Join Another School</div>
                 {addSchoolError && <div className="form-error" style={{marginBottom:".75rem"}}>⚠ {addSchoolError}</div>}
                 <div style={{display:"flex",gap:".5rem"}}>
                   <input className="form-input" placeholder="Enter school code" value={addSchoolCode} onChange={e=>setAddSchoolCode(e.target.value)} style={{flex:1}}/>
@@ -710,21 +792,74 @@ export default function TutuTrade() {
 
         ) : (
           <>
+            {/* HERO with clickable school badges */}
             {view === "browse" && (
               <div className="hero">
                 <div className="hero-eyebrow">✦ TutuTrade ✦</div>
                 <h1 className="hero-title">Buy & sell <em>beautiful</em><br/>dancewear</h1>
                 <p className="hero-sub">Costumes, shoes & accessories from dancers in your school — pre-loved and ready to perform.</p>
-                {userSchools.length > 0 && <div className="school-badges">{userSchools.map(us => <div key={us.id} className="school-badge">🏫 {us.school_name}</div>)}</div>}
+                <div className="school-badges">
+                  {schools.map(s => {
+                    const sc = s.color || P.accent;
+                    const isActive = filters.school === s.id;
+                    const count = listings.filter(l => l.school_id === s.id).length;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => handleClickSchoolBadge(s.id)}
+                        style={{
+                          display:"inline-flex",alignItems:"center",gap:".5rem",
+                          padding:".45rem 1rem",
+                          background: isActive ? hexToRgba(sc,0.2) : hexToRgba(sc,0.08),
+                          border:`1px solid ${isActive ? sc : hexToRgba(sc,0.3)}`,
+                          borderRadius:20,fontSize:".78rem",color:sc,
+                          cursor:"pointer",transition:"all .2s",fontFamily:"'Jost',sans-serif",
+                          fontWeight: isActive ? 500 : 400,
+                          boxShadow: isActive ? `0 0 12px ${hexToRgba(sc,0.25)}` : "none",
+                          transform: isActive ? "translateY(-1px)" : "none",
+                        }}
+                      >
+                        <span style={{width:7,height:7,borderRadius:"50%",background:sc,display:"inline-block",flexShrink:0}}/>
+                        {s.name}
+                        <span style={{fontSize:".65rem",opacity:.7}}>({count})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {filters.school && (
+                  <button style={{background:"none",border:"none",color:P.muted,fontSize:".75rem",cursor:"pointer",textDecoration:"underline",fontFamily:"'Jost',sans-serif"}} onClick={() => setFilters(f=>({...f,school:""}))}>
+                    Clear filter — show all schools
+                  </button>
+                )}
               </div>
             )}
+
             {user && (
               <div className="nav-pills">
                 <button className={`nav-pill ${view==="browse"?"active":""}`} onClick={() => setView("browse")}>Browse all</button>
                 <button className={`nav-pill ${view==="mylistings"?"active":""}`} onClick={() => setView("mylistings")}>My listings</button>
               </div>
             )}
-            {view === "browse" && <AdBanner ad={topAd} />}
+
+            {/* School filter banner */}
+            {view === "browse" && activeSchoolFilter && (() => {
+              const sc = activeSchoolFilter.color || P.accent;
+              const count = filtered.length;
+              return (
+                <div className="school-filter-banner" style={{background:hexToRgba(sc,0.1),border:`1px solid ${hexToRgba(sc,0.3)}`}}>
+                  <div>
+                    <div className="school-filter-banner-name" style={{color:sc}}>{activeSchoolFilter.name}</div>
+                    <div className="school-filter-banner-sub" style={{color:sc}}>{count} listing{count!==1?"s":""} available</div>
+                  </div>
+                  <button className="btn btn-sm" style={{background:"transparent",color:sc,border:`1px solid ${hexToRgba(sc,0.4)}`}} onClick={() => setFilters(f=>({...f,school:""}))}>
+                    × Clear
+                  </button>
+                </div>
+              );
+            })()}
+
+            {view === "browse" && !activeSchoolFilter && <AdBanner ad={topAd} />}
+
             {view === "browse" && (
               <div className="filters">
                 <input className="filter-input" placeholder="Search costumes..." value={filters.search} onChange={e => setFilters(f=>({...f,search:e.target.value}))}/>
@@ -735,7 +870,9 @@ export default function TutuTrade() {
                 <input className="filter-input" placeholder="Max price £" style={{minWidth:90,maxWidth:110}} value={filters.maxPrice} onChange={e => setFilters(f=>({...f,maxPrice:e.target.value}))}/>
               </div>
             )}
+
             <div className="listing-count">Showing <strong>{filtered.length}</strong> {filtered.length===1?"listing":"listings"}{view==="mylistings"?" — your items":""}</div>
+
             <div className={view==="browse" ? "layout" : ""}>
               <div>
                 <div className="grid">
@@ -745,23 +882,32 @@ export default function TutuTrade() {
                       <h3>{view==="mylistings" ? "No listings yet" : "No items found"}</h3>
                       <p style={{marginTop:".5rem",fontSize:".83rem"}}>{view==="mylistings" ? "Click '+ List Item' to get started." : "Try adjusting your filters."}</p>
                     </div>
-                  ) : filtered.map(l => (
-                    <div className="card" key={l.id} onClick={() => { setSelectedListing(l); setModal("detail"); }}>
-                      <div className="card-image">
-                        {l.image ? <img src={l.image} alt={l.title}/> : styleEmoji[l.style]||"👗"}
-                        <span className={`condition-pill condition-${conditionKey[l.condition]||"good"}`}>{l.condition}</span>
-                      </div>
-                      <div className="card-body">
-                        <div className="card-style-tag">{l.style}</div>
-                        <div className="card-title">{l.title}</div>
-                        <div className="card-meta">Size: {l.size} · {l.school_name}</div>
-                        <div className="card-footer">
-                          <div className="price">£{l.price} <span>GBP</span></div>
-                          <button className="btn btn-outline btn-sm" onClick={e=>{e.stopPropagation();setSelectedListing(l);setModal("detail");}}>View</button>
+                  ) : filtered.map(l => {
+                    const sc = getSchoolColor(l.school_id);
+                    return (
+                      <div className="card" key={l.id} style={{borderColor:hexToRgba(sc,0.25)}} onClick={() => { setSelectedListing(l); setModal("detail"); }}>
+                        <div className="school-stripe" style={{background:sc}}/>
+                        <div className="card-image">
+                          {l.image ? <img src={l.image} alt={l.title}/> : styleEmoji[l.style]||"👗"}
+                          <span className={`condition-pill condition-${conditionKey[l.condition]||"good"}`}>{l.condition}</span>
+                        </div>
+                        <div className="card-body">
+                          <div className="card-style-tag" style={{color:sc}}>{l.style}</div>
+                          <div className="card-title">{l.title}</div>
+                          <div className="card-meta">
+                            Size: {l.size} ·{" "}
+                            <span style={{color:sc,cursor:"pointer"}} onClick={e=>{e.stopPropagation();handleClickSchoolBadge(l.school_id);}}>
+                              {l.school_name}
+                            </span>
+                          </div>
+                          <div className="card-footer">
+                            <div className="price">£{l.price} <span>GBP</span></div>
+                            <button className="btn btn-sm" style={{background:"transparent",color:sc,border:`1px solid ${hexToRgba(sc,0.5)}`}} onClick={e=>{e.stopPropagation();setSelectedListing(l);setModal("detail");}}>View</button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
               {view === "browse" && <AdSidebar ads={ads} />}
@@ -848,9 +994,10 @@ export default function TutuTrade() {
       {modal === "detail" && selectedListing && (() => {
         const { commission } = calcFees(selectedListing.price, commissionPct);
         const isOwner = user?.email === selectedListing.seller_email;
+        const sc = getSchoolColor(selectedListing.school_id);
         return (
           <div className="overlay" onClick={closeModal}>
-            <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal" onClick={e=>e.stopPropagation()} style={{borderTop:`3px solid ${sc}`}}>
               <div className="modal-header"><div className="modal-title">{selectedListing.title}</div><button className="modal-close" onClick={closeModal}>×</button></div>
               <div className="modal-body">
                 <div className="detail-image">{selectedListing.image?<img src={selectedListing.image} alt={selectedListing.title}/>:styleEmoji[selectedListing.style]||"👗"}</div>
@@ -863,7 +1010,7 @@ export default function TutuTrade() {
                 <p className="detail-desc">{selectedListing.description||"No description provided."}</p>
                 <div className="seller-info">
                   <div><strong>Seller:</strong> {selectedListing.seller_name}</div>
-                  <div className="seller-school">📍 {selectedListing.school_name}</div>
+                  <div style={{marginTop:".18rem",fontSize:".73rem"}}>📍 <span style={{color:sc}}>{selectedListing.school_name}</span></div>
                 </div>
                 {!isOwner && (
                   <div className="commission-box">
