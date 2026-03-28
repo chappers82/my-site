@@ -282,7 +282,7 @@ export default function TutuTrade() {
   const [filters, setFilters] = useState({ search:"", style:"", size:"", condition:"", maxPrice:"", school:"" });
   const [authForm, setAuthForm] = useState({ name:"", email:"", password:"", schoolCode:"" });
   const [authError, setAuthError] = useState("");
-  const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", condition:"", price:"", description:"", paypalEmail:"", image:null, schoolId:"" });
+  const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", condition:"", price:"", description:"", image:null, schoolId:"" });
   const [createError, setCreateError] = useState("");
   const [editingAd, setEditingAd] = useState(null);
   const [adForm, setAdForm] = useState({ title:"", tagline:"", url:"", slot:"top", active:true, image:null });
@@ -384,12 +384,12 @@ export default function TutuTrade() {
 
   const handleCreate = async () => {
     setCreateError("");
-    const { title, style, size, condition, price, paypalEmail, schoolId } = createForm;
-    if (!title || !style || !size || !condition || !price || !paypalEmail) return setCreateError("Please fill in all required fields.");
+    const { title, style, size, condition, price, schoolId } = createForm;
+    if (!title || !style || !size || !condition || !price) return setCreateError("Please fill in all required fields.");
     if (!schoolId) return setCreateError("Please select which school to list under.");
     if (isNaN(price) || Number(price) <= 0) return setCreateError("Please enter a valid price.");
     const school = userSchools.find(s => s.school_id === schoolId);
-    const { error } = await supabase.from("listings").insert([{ title, style, size, condition, price: Number(price), description: createForm.description, paypal_email: paypalEmail, image: createForm.image, seller_name: user.user_metadata?.full_name || user.email, seller_email: user.email, school_name: school?.school_name || "", school_id: schoolId }]);
+    const { error } = await supabase.from("listings").insert([{ title, style, size, condition, price: Number(price), description: createForm.description, image: createForm.image, seller_name: user.user_metadata?.full_name || user.email, seller_email: user.email, school_name: school?.school_name || "", school_id: schoolId }]);
     if (error) return setCreateError("Failed to create listing. Please try again.");
     await loadListings();
     setCreateForm({ title:"", style:"", size:"", condition:"", price:"", description:"", paypalEmail:"", image:null, schoolId:"" });
@@ -979,11 +979,6 @@ export default function TutuTrade() {
                 <label className="form-label">Photo</label>
                 <label className="upload-area"><input type="file" accept="image/*" onChange={e=>handleImageUpload(e,setCreateForm)}/>{createForm.image?<img src={createForm.image} className="upload-preview" alt="preview"/>:<div>📷 Click to upload photo</div>}</label>
               </div>
-              <div className="form-group">
-                <label className="form-label">Your PayPal email *</label>
-                <input className="form-input" type="email" placeholder="your-paypal@email.com" value={createForm.paypalEmail} onChange={e=>setCreateForm(f=>({...f,paypalEmail:e.target.value}))}/>
-                <div className="form-hint">Buyers pay the listed price. Platform fee is deducted from your payout.</div>
-              </div>
               <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={handleCreate}>Publish listing</button>
             </div>
           </div>
@@ -1017,13 +1012,13 @@ export default function TutuTrade() {
                     <div className="commission-row"><span className="commission-label">Item price</span><span className="commission-value">£{selectedListing.price}</span></div>
                     <div className="commission-row"><span className="commission-label">Platform fee ({commissionPct}%)</span><span className="commission-value">£{commission}</span></div>
                     <div className="commission-row total"><span>You pay</span><span>£{selectedListing.price}</span></div>
-                    <div style={{fontSize:".67rem",color:P.muted,marginTop:".35rem"}}>Platform fee is deducted from the seller's payout — you pay the listed price only.</div>
+                    <div style={{fontSize:".67rem",color:P.muted,marginTop:".35rem"}}>Payment is processed securely via PayPal. The seller will receive their payout within 24 hours of sale.</div>
                   </div>
                 )}
                 {isOwner ? (
                   <button className="btn btn-danger" style={{width:"100%"}} onClick={()=>handleDelete(selectedListing.id)}>Remove listing</button>
                 ) : (
-                  <a href={`https://www.paypal.com/paypalme/${selectedListing.paypal_email?.split("@")[0]}/${selectedListing.price}GBP`} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>
+                  <a href={`https://www.paypal.com/paypalme/grantchaplin/${selectedListing.price}GBP`} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>
                     <button className="paypal-btn">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.067 8.478c.492.88.556 2.014.3 3.327-.74 3.806-3.276 5.12-6.514 5.12h-.5a.805.805 0 0 0-.794.68l-.04.22-.63 3.993-.032.17a.804.804 0 0 1-.794.679H7.72a.483.483 0 0 1-.477-.558L7.418 21h1.518l.95-6.02h1.385c4.678 0 7.75-2.203 8.796-6.502zm-2.96-5.09c.762.868.983 1.81.755 3.137-.093.534-.26 1.02-.5 1.46-.838-3.511-3.235-4.7-7.438-4.7H5.964l.947-5.951A.483.483 0 0 1 7.388 1h5.787c3.44 0 5.58 1.03 6.557 3.019l-.625-.631z"/></svg>
                       Pay £{selectedListing.price} with PayPal
