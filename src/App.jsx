@@ -335,6 +335,8 @@ export default function TutuTrade() {
   const [authError, setAuthError] = useState("");
   const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", condition:"", price:"", description:"", image:null, schoolId:"" });
   const [createError, setCreateError] = useState("");
+  const [editForm, setEditForm] = useState({ title:"", style:"", size:"", condition:"", price:"", description:"", image:null });
+  const [editError, setEditError] = useState("");
   const [editingAd, setEditingAd] = useState(null);
   const [adForm, setAdForm] = useState({ title:"", tagline:"", url:"", slot:"top", active:true, image:null });
   const [newSchoolForm, setNewSchoolForm] = useState({ name:"", code:"", color:"#c9a96e" });
@@ -488,6 +490,31 @@ export default function TutuTrade() {
   const handleMarkUnsold = async (id) => {
     await supabase.from("listings").update({ sold: false, sold_at: null }).eq("id", id);
     await loadListings(); setSuccess("Item relisted!");
+  };
+
+  const openEditListing = (listing) => {
+    setEditForm({
+      title: listing.title, style: listing.style, size: listing.size,
+      condition: listing.condition, price: listing.price,
+      description: listing.description || "", image: listing.image || null,
+    });
+    setEditError("");
+    setModal("editListing");
+  };
+
+  const handleUpdateListing = async () => {
+    setEditError("");
+    const { title, style, size, condition, price } = editForm;
+    if (!title || !style || !size || !condition || !price) return setEditError("Please fill in all required fields.");
+    if (isNaN(price) || Number(price) <= 0) return setEditError("Please enter a valid price.");
+    const { error } = await supabase.from("listings").update({
+      title, style, size, condition,
+      price: Number(price),
+      description: editForm.description,
+      image: editForm.image,
+    }).eq("id", selectedListing.id);
+    if (error) return setEditError("Failed to update listing. Please try again.");
+    await loadListings(); closeModal(); setSuccess("Listing updated!");
   };
   const handleSaveCommission = async (val) => { setCommissionPct(val); await supabase.from("settings").upsert({ key:"commission_pct", value:String(val) }); };
 
@@ -1169,6 +1196,7 @@ export default function TutuTrade() {
                       ? <button className="btn btn-success" style={{width:"100%",padding:".72rem"}} onClick={()=>handleMarkSold(selectedListing.id)}>✓ Mark as sold</button>
                       : <button className="btn btn-ghost" style={{width:"100%",padding:".72rem"}} onClick={()=>handleMarkUnsold(selectedListing.id)}>↩ Relist item</button>
                     }
+                    <button className="btn btn-outline" style={{width:"100%"}} onClick={()=>openEditListing(selectedListing)}>✏ Edit listing</button>
                     <button className="btn btn-danger" style={{width:"100%"}} onClick={()=>handleDelete(selectedListing.id)}>Remove listing</button>
                   </div>
                 ) : (
@@ -1191,6 +1219,40 @@ export default function TutuTrade() {
         <div className="lightbox" onClick={() => setLightboxImage(null)}>
           <button className="lightbox-close" onClick={() => setLightboxImage(null)}>×</button>
           <img src={lightboxImage} alt="Full size" onClick={e => e.stopPropagation()}/>
+        </div>
+      )}
+
+      {/* EDIT LISTING MODAL */}
+      {modal === "editListing" && selectedListing && (
+        <div className="overlay" onClick={closeModal}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-header"><div className="modal-title">Edit listing</div><button className="modal-close" onClick={closeModal}>×</button></div>
+            <div className="modal-body">
+              {editError && <div className="form-error" style={{marginBottom:"1rem"}}>⚠ {editError}</div>}
+              <div className="form-group"><label className="form-label">Item title *</label><input className="form-input" placeholder="e.g. Pink Ballet Tutu" value={editForm.title} onChange={e=>setEditForm(f=>({...f,title:e.target.value}))}/></div>
+              <div className="form-row">
+                <div className="form-group"><label className="form-label">Dance style *</label><select className="form-select" value={editForm.style} onChange={e=>setEditForm(f=>({...f,style:e.target.value}))}><option value="">Select...</option>{DANCE_STYLES.map(s=><option key={s}>{s}</option>)}</select></div>
+                <div className="form-group"><label className="form-label">Size *</label><select className="form-select" value={editForm.size} onChange={e=>setEditForm(f=>({...f,size:e.target.value}))}><option value="">Select...</option>{SIZES.map(s=><option key={s}>{s}</option>)}</select></div>
+              </div>
+              <div className="form-row">
+                <div className="form-group"><label className="form-label">Condition *</label><select className="form-select" value={editForm.condition} onChange={e=>setEditForm(f=>({...f,condition:e.target.value}))}><option value="">Select...</option>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select></div>
+                <div className="form-group"><label className="form-label">Price (£) *</label><input className="form-input" type="number" min="1" placeholder="25" value={editForm.price} onChange={e=>setEditForm(f=>({...f,price:e.target.value}))}/></div>
+              </div>
+              {editForm.price && !isNaN(editForm.price) && Number(editForm.price) > 0 && (
+                <div className="commission-box">
+                  <div className="commission-row"><span className="commission-label">Listing price</span><span className="commission-value">£{Number(editForm.price).toFixed(2)}</span></div>
+                  <div className="commission-row"><span className="commission-label">Platform fee ({commissionPct}%)</span><span className="commission-value">−£{calcFees(Number(editForm.price),commissionPct).commission}</span></div>
+                  <div className="commission-row total"><span>You receive</span><span>£{calcFees(Number(editForm.price),commissionPct).sellerReceives}</span></div>
+                </div>
+              )}
+              <div className="form-group"><label className="form-label">Description</label><textarea className="form-textarea" placeholder="Describe the item..." value={editForm.description} onChange={e=>setEditForm(f=>({...f,description:e.target.value}))}/></div>
+              <div className="form-group">
+                <label className="form-label">Photo</label>
+                <label className="upload-area"><input type="file" accept="image/*" onChange={e=>handleImageUpload(e,setEditForm)}/>{editForm.image?<img src={editForm.image} className="upload-preview" alt="preview"/>:<div>📷 Click to upload new photo</div>}</label>
+              </div>
+              <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={handleUpdateListing}>Save changes</button>
+            </div>
+          </div>
         </div>
       )}
 
