@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from "react";
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
 
 // ─── EMAIL ────────────────────────────────────────────────────────────────
@@ -413,6 +412,9 @@ export default function TutuTrade() {
   const [ads, setAds] = useState([]);
   const [schools, setSchools] = useState([]);
   const [events, setEvents] = useState([]);
+  const [danceStyles, setDanceStyles] = useState(["Ballet","Jazz","Tap","Contemporary","Hip Hop","Musical Theatre","Acro","Irish","Ballroom","Lyrical"]);
+  const [sizes, setSizes] = useState(["Age 2-3","Age 3-4","Age 4-5","Age 5-6","Age 6-7","Age 7-8","Age 8-9","Age 9-10","Age 10-11","Age 11-12","Teen XS","Teen S","Teen M","Teen L","Adult XS","Adult S","Adult M","Adult L","Adult XL"]);
+  const [conditions, setConditions] = useState(["New with tags","Excellent","Good","Well loved"]);
   const [userSchools, setUserSchools] = useState([]);
   const [allUserSchools, setAllUserSchools] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
@@ -466,7 +468,7 @@ export default function TutuTrade() {
       if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); }
       else { setUserSchools([]); setIsAdmin(false); }
     });
-    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents();
+    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns();
     const ticker = setInterval(() => setTick(t => t + 1), 1000);
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
   }, []);
@@ -478,6 +480,16 @@ export default function TutuTrade() {
   const loadSchools = async () => { const { data } = await supabase.from("schools").select("*").order("name"); if (data) setSchools(data); };
   const loadCommission = async () => { const { data } = await supabase.from("settings").select("value").eq("key","commission_pct").single(); if (data) setCommissionPct(parseFloat(data.value)); };
   const loadEvents = async () => { const { data } = await supabase.from("events").select("*").order("event_date"); if (data) setEvents(data); };
+  const loadDropdowns = async () => {
+    const [ds, sz, cn] = await Promise.all([
+      supabase.from("dance_styles").select("*").order("sort_order"),
+      supabase.from("sizes").select("*").order("sort_order"),
+      supabase.from("conditions").select("*").order("sort_order"),
+    ]);
+    if (ds.data?.length) setDanceStyles(ds.data.map(d => d.name));
+    if (sz.data?.length) setSizes(sz.data.map(s => s.name));
+    if (cn.data?.length) setConditions(cn.data.map(c => c.name));
+  };
 
   const handleSaveEvent = async () => {
     if (!eventForm.title || !eventForm.event_date || !eventForm.school_id) return;
