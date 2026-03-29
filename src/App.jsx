@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import { supabase } from "./supabase.js";
 
+// ─── CONSTANTS ────────────────────────────────────────────────────────────
+const ADMIN_EMAIL = "grant.chaplin@hotmail.com";
+const SITE_URL = window.location.origin;
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────
 const calcFees = (price, pct) => {
   const commission = parseFloat((price * pct / 100).toFixed(2));
@@ -8,7 +12,7 @@ const calcFees = (price, pct) => {
 };
 
 // ─── EMAIL ────────────────────────────────────────────────────────────────
-const calcFees = (price, pct) => { const commission = parseFloat((price * pct / 100).toFixed(2)); return { commission, sellerReceives: parseFloat((price - commission).toFixed(2)) }; };`nconst sendSoldEmail = async ({ listing, commissionPct }) => {
+const sendSoldEmail = async ({ listing, commissionPct }) => {
   const { commission, sellerReceives } = calcFees(listing.price, commissionPct);
   try {
     await fetch("https://api.resend.com/emails", {
@@ -53,8 +57,6 @@ const ITEM_TYPES = ["Clothing","Footwear","Accessories / Other"];
 const CONDITIONS = ["New with tags","Excellent","Good","Well loved"];
 const styleEmoji = {Ballet:"🩰",Jazz:"✨",Tap:"🎩",Contemporary:"🌊","Hip Hop":"🎤","Musical Theatre":"🎭",Acro:"🤸",Irish:"☘️",Ballroom:"💃",Lyrical:"🕊️"};
 const conditionKey = {"New with tags":"new","Excellent":"excellent","Good":"good","Well loved":"worn"};
-const ADMIN_EMAIL = "grant.chaplin@hotmail.com";
-const SITE_URL = window.location.origin;
 
 const P = {
   bg:"#1a1228",surface:"#231934",card:"#2d2142",border:"#3d2f5c",
@@ -2055,4 +2057,3 @@ export default function TutuTrade() {
     </div>
   );
 }
-
