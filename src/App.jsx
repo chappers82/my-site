@@ -143,7 +143,7 @@ const css = `
   .ad-sidebar-card{padding:1rem;background:${P.surface};border:1px solid ${P.border};border-radius:10px;text-decoration:none;transition:border-color .2s;display:block}
   .ad-sidebar-card:hover{border-color:rgba(201,169,110,.3)}
   .ad-sidebar-label{font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:${P.muted};opacity:.7;margin-bottom:.5rem}
-  .ad-sidebar-icon{width:100%;height:64px;background:linear-gradient(135deg,#2a1f3d,#1e1729);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem;margin-bottom:.65rem;overflow:hidden}
+  .ad-sidebar-icon{width:100%;height:64px;background:#1e1729;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem;margin-bottom:.65rem;overflow:hidden}
   .ad-sidebar-icon img{width:100%;height:100%;object-fit:cover}
   .ad-sidebar-card strong{display:block;font-size:.82rem;color:${P.text};margin-bottom:.2rem}
   .ad-sidebar-card span{font-size:.72rem;color:${P.muted};line-height:1.4}
@@ -407,7 +407,7 @@ function AdBanner({ ad }) {
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" style={{display:"block",position:"relative",marginBottom:"1.75rem",borderRadius:10,overflow:"hidden",textDecoration:"none"}}>
         <span style={{position:"absolute",top:".45rem",right:".6rem",fontSize:".58rem",textTransform:"uppercase",letterSpacing:".1em",color:"white",opacity:.7,background:"rgba(0,0,0,.4)",padding:".15rem .4rem",borderRadius:4}}>Ad</span>
-        <img src={ad.image} alt={ad.title} style={{width:"100%",height:90,objectFit:"cover",display:"block"}}/>
+        <img src={ad.image} alt={ad.title} style={{width:"100%",height:90,objectFit:"contain",display:"block",background:"#1e1729"}}/>
       </a>
     );
   }
@@ -420,23 +420,51 @@ function AdBanner({ ad }) {
   );
 }
 
-function AdSidebar({ ads }) {
-  const active = ads.filter(a => a.active && a.slot === "sidebar");
+function AdSidebarSlot({ ads, slot, schoolId }) {
+  const active = ads.filter(a => {
+    if (!a.active || a.slot !== slot) return false;
+    if (a.scope === "global") return !schoolId; // global ads only on main browse
+    if (a.scope === "school") return a.school_id === schoolId;
+    if (a.scope === "both") return true;
+    return false;
+  });
   if (!active.length) return null;
   return (
-    <div className="sidebar">
+    <>
       {active.map(ad => {
-        const href = ad.url.startsWith("http") ? ad.url : `https://${ad.url}`;
+        const href = ad.url?.startsWith("http") ? ad.url : `https://${ad.url}`;
         return (
           <a key={ad.id} className="ad-sidebar-card" href={href} target="_blank" rel="noopener noreferrer">
             <div className="ad-sidebar-label">Sponsored</div>
-            <div className="ad-sidebar-icon">{ad.image ? <img src={ad.image} alt={ad.title}/> : "🩰"}</div>
+            <div className="ad-sidebar-icon">{ad.image ? <img src={ad.image} alt={ad.title} style={{width:"100%",height:"100%",objectFit:"contain"}}/> : "🩰"}</div>
             <strong>{ad.title}</strong><br/><span>{ad.tagline}</span>
             <div className="ad-sidebar-cta">Visit →</div>
           </a>
         );
       })}
-    </div>
+    </>
+  );
+}
+
+function SchoolAdBanner({ ads, schoolId }) {
+  // School-specific ad above countdown
+  const ad = ads.find(a => a.active && a.slot === "school-above-countdown" && (a.scope === "school" || a.scope === "both") && a.school_id === schoolId);
+  if (!ad) return null;
+  const href = ad.url?.startsWith("http") ? ad.url : `https://${ad.url}`;
+  if (ad.image) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" style={{display:"block",position:"relative",marginBottom:"1rem",borderRadius:10,overflow:"hidden",textDecoration:"none"}}>
+        <span style={{position:"absolute",top:".45rem",right:".6rem",fontSize:".58rem",textTransform:"uppercase",letterSpacing:".1em",color:"white",opacity:.7,background:"rgba(0,0,0,.4)",padding:".15rem .4rem",borderRadius:4}}>Ad</span>
+        <img src={ad.image} alt={ad.title} style={{width:"100%",height:80,objectFit:"contain",display:"block",background:"#1e1729"}}/>
+      </a>
+    );
+  }
+  return (
+    <a className="ad-banner" href={href} target="_blank" rel="noopener noreferrer" style={{marginBottom:"1rem"}}>
+      <span className="ad-banner-label">Ad</span>
+      <div className="ad-banner-icon">💃</div>
+      <div className="ad-banner-text"><strong>{ad.title}</strong><span>{ad.tagline}</span></div>
+    </a>
   );
 }
 
@@ -483,7 +511,7 @@ export default function TutuTrade() {
   const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolId:"" });
   const [createError, setCreateError] = useState("");
   const [editingAd, setEditingAd] = useState(null);
-  const [adForm, setAdForm] = useState({ title:"", tagline:"", url:"", slot:"top", active:true, image:null });
+  const [adForm, setAdForm] = useState({ title:"", tagline:"", url:"", slot:"sidebar-top", scope:"global", school_id:null, active:true, image:null });
   const [newSchoolForm, setNewSchoolForm] = useState({ name:"", code:"", color:"#c9a96e" });
   const [editingSchoolColor, setEditingSchoolColor] = useState(null);
   const [addSchoolCode, setAddSchoolCode] = useState("");
@@ -794,14 +822,20 @@ export default function TutuTrade() {
     const { title, style, size, condition, price } = editForm;
     if (!title || !style || !condition || !price) return setEditError("Please fill in all required fields.");
     if (isNaN(price) || Number(price) <= 0) return setEditError("Please enter a valid price.");
-    const { error } = await supabase.from("listings").update({
+    const updates = {
       title, style, size, condition,
       price: Number(price),
       description: editForm.description,
       image: editForm.images?.[0] || editForm.image || null,
       images: editForm.images || [],
-    }).eq("id", selectedListing.id);
-    if (error) return setEditError("Failed to update. Please try again.");
+    };
+    // Build query — admin can update any listing, owner can update their own
+    let query = supabase.from("listings").update(updates).eq("id", selectedListing.id);
+    const { error } = await query;
+    if (error) {
+      console.error("Update error:", error);
+      return setEditError(`Failed to update: ${error.message}`);
+    }
     await loadListings(); closeModal(); setSuccess("Listing updated!");
   };
 
@@ -882,8 +916,14 @@ export default function TutuTrade() {
 
   const handleSaveAd = async () => {
     if (!adForm.title || !adForm.url) return;
-    if (editingAd === "new") await supabase.from("ads").insert([adForm]);
-    else await supabase.from("ads").update(adForm).eq("id", editingAd);
+    const payload = {
+      title: adForm.title, tagline: adForm.tagline, url: adForm.url,
+      slot: adForm.slot, active: adForm.active, image: adForm.image,
+      scope: adForm.scope || "global",
+      school_id: adForm.scope === "school" || adForm.scope === "both" ? adForm.school_id : null,
+    };
+    if (editingAd === "new") await supabase.from("ads").insert([payload]);
+    else await supabase.from("ads").update(payload).eq("id", editingAd);
     await loadAds(); closeModal();
   };
 
@@ -913,7 +953,12 @@ export default function TutuTrade() {
     return true;
   });
 
-  const topAd = ads.find(a => a.active && a.slot === "top");
+  // Find top banner ad — school-specific takes priority over global when filtering by school
+  const activeSchoolId = activeSchoolFilter?.id || null;
+  const topAd = ads.find(a => a.active && a.slot === "top" && a.scope === "school" && a.school_id === activeSchoolId)
+    || ads.find(a => a.active && a.slot === "top" && (a.scope === "both"))
+    || ads.find(a => a.active && a.slot === "top" && a.scope === "global" && !activeSchoolId)
+    || ads.find(a => a.active && a.slot === "top");
   const totalRevenue = listings.reduce((s, l) => s + calcFees(l.price, getCommission(l.school_id)).commission, 0);
   const activeSchoolFilter = filters.school ? getSchool(filters.school) : null;
 
@@ -1237,18 +1282,21 @@ export default function TutuTrade() {
               <div className="admin-section">
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
                   <div className="admin-section-title" style={{marginBottom:0,borderBottom:"none",paddingBottom:0}}>📢 Advertisers</div>
-                  <button className="btn btn-primary btn-sm" onClick={() => { setEditingAd("new"); setAdForm({title:"",tagline:"",url:"",slot:"top",active:true,image:null}); setModal("editAd"); }}>+ Add</button>
+                  <button className="btn btn-primary btn-sm" onClick={() => { setEditingAd("new"); setAdForm({title:"",tagline:"",url:"",slot:"sidebar-top",scope:"global",school_id:null,active:true,image:null}); setModal("editAd"); }}>+ Add</button>
                 </div>
                 <table className="admin-table">
-                  <thead><tr><th>Advertiser</th><th>Slot</th><th>Status</th><th>Actions</th></tr></thead>
+                  <thead><tr><th>Advertiser</th><th>Slot</th><th>Scope</th><th>Status</th><th>Actions</th></tr></thead>
                   <tbody>
                     {ads.map(ad => (
                       <tr key={ad.id}>
                         <td><span className={`ad-dot ${ad.active?"active":"inactive"}`}/>{ad.title}<div style={{fontSize:".7rem",color:P.muted}}>{ad.tagline}</div></td>
                         <td><span className="tag tag-style">{ad.slot}</span></td>
+                        <td style={{fontSize:".75rem",color:P.muted}}>
+                          {ad.scope === "school" ? `🏫 ${schools.find(s=>s.id===ad.school_id)?.name||"School"}` : ad.scope === "both" ? `✨ Global + ${schools.find(s=>s.id===ad.school_id)?.name||"School"}` : "🌐 Global"}
+                        </td>
                         <td><button className={`btn ${ad.active?"btn-success":"btn-ghost"} btn-sm`} onClick={() => toggleAd(ad.id,ad.active)}>{ad.active?"Live":"Paused"}</button></td>
                         <td style={{display:"flex",gap:".4rem"}}>
-                          <button className="btn btn-ghost btn-sm" onClick={() => { setEditingAd(ad.id); setAdForm({title:ad.title,tagline:ad.tagline,url:ad.url,slot:ad.slot,active:ad.active,image:ad.image||null}); setModal("editAd"); }}>Edit</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => { setEditingAd(ad.id); setAdForm({title:ad.title,tagline:ad.tagline||"",url:ad.url,slot:ad.slot||"sidebar-top",scope:ad.scope||"global",school_id:ad.school_id||null,active:ad.active,image:ad.image||null}); setModal("editAd"); }}>Edit</button>
                           <button className="btn btn-danger btn-sm" onClick={() => deleteAd(ad.id)}>Remove</button>
                         </td>
                       </tr>
@@ -1459,6 +1507,7 @@ export default function TutuTrade() {
                   </div>
                   {schoolEvents.length > 0 && (
                     <div className="countdown-section">
+                      <SchoolAdBanner ads={ads} schoolId={activeSchoolFilter.id}/>
                       <div style={{fontSize:".7rem",textTransform:"uppercase",letterSpacing:".12em",color:sc,marginBottom:".75rem",opacity:.8}}>📅 Upcoming Events</div>
                       <div className="countdown-cards">
                         {schoolEvents.map(ev => {
@@ -1557,7 +1606,13 @@ export default function TutuTrade() {
                   })}
                 </div>
               </div>
-              {view === "browse" && <AdSidebar ads={ads} />}
+              {view === "browse" && (
+                <div className="sidebar">
+                  <AdSidebarSlot ads={ads} slot="sidebar-top" schoolId={activeSchoolId}/>
+                  <AdSidebarSlot ads={ads} slot="school-sidebar" schoolId={activeSchoolId}/>
+                  <AdSidebarSlot ads={ads} slot="sidebar-bottom" schoolId={activeSchoolId}/>
+                </div>
+              )}
             </div>
 
             {/* ── BOARD VIEW ── */}
@@ -1938,12 +1993,43 @@ export default function TutuTrade() {
               <div className="form-group"><label className="form-label">Tagline</label><input className="form-input" placeholder="e.g. Professional dancewear since 1929" value={adForm.tagline} onChange={e=>setAdForm(f=>({...f,tagline:e.target.value}))}/></div>
               <div className="form-group"><label className="form-label">Website URL *</label><input className="form-input" placeholder="https://..." value={adForm.url} onChange={e=>setAdForm(f=>({...f,url:e.target.value}))}/></div>
               <div className="form-row">
-                <div className="form-group"><label className="form-label">Ad slot</label><select className="form-select" value={adForm.slot} onChange={e=>setAdForm(f=>({...f,slot:e.target.value}))}><option value="top">Top banner</option><option value="sidebar">Sidebar</option></select></div>
+                <div className="form-group">
+                  <label className="form-label">Ad position</label>
+                  <select className="form-select" value={adForm.slot} onChange={e=>setAdForm(f=>({...f,slot:e.target.value}))}>
+                    <optgroup label="Global positions">
+                      <option value="sidebar-top">Sidebar — Top</option>
+                      <option value="sidebar-bottom">Sidebar — Bottom</option>
+                    </optgroup>
+                    <optgroup label="School positions">
+                      <option value="school-above-countdown">School — Above countdown</option>
+                      <option value="school-sidebar">School — Sidebar</option>
+                    </optgroup>
+                  </select>
+                </div>
                 <div className="form-group"><label className="form-label">Status</label><select className="form-select" value={adForm.active?"true":"false"} onChange={e=>setAdForm(f=>({...f,active:e.target.value==="true"}))}><option value="true">Live</option><option value="false">Paused</option></select></div>
               </div>
+              <div className="form-group">
+                <label className="form-label">Where to show</label>
+                <select className="form-select" value={adForm.scope||"global"} onChange={e=>setAdForm(f=>({...f,scope:e.target.value,school_id:null}))}>
+                  <option value="global">🌐 Global — all logged-in users</option>
+                  <option value="school">🏫 Specific school only</option>
+                  <option value="both">✨ Both — global + specific school</option>
+                </select>
+              </div>
+              {(adForm.scope === "school" || adForm.scope === "both") && (
+                <div className="form-group">
+                  <label className="form-label">Select school</label>
+                  <select className="form-select" value={adForm.school_id||""} onChange={e=>setAdForm(f=>({...f,school_id:e.target.value}))}>
+                    <option value="">Select school...</option>
+                    {schools.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              )}
               <div style={{padding:".65rem .85rem",background:hexToRgba(P.accent,0.07),border:`1px solid ${hexToRgba(P.accent,0.2)}`,borderRadius:7,fontSize:".75rem",color:P.muted,marginBottom:"1rem"}}>
                 💡 <strong style={{color:P.accent}}>Recommended graphic sizes:</strong><br/>
-                Top banner: <strong style={{color:P.text}}>728 × 90px</strong> &nbsp;·&nbsp; Sidebar: <strong style={{color:P.text}}>220 × 250px</strong><br/>
+                Sidebar top/bottom: <strong style={{color:P.text}}>220 × 250px</strong><br/>
+                School above countdown: <strong style={{color:P.text}}>600 × 80px</strong><br/>
+                School sidebar: <strong style={{color:P.text}}>220 × 250px</strong><br/>
                 Supply PNG or JPG at 2× resolution for crisp display on retina screens.
               </div>
               <div className="form-group">
