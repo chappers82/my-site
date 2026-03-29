@@ -189,6 +189,24 @@ const css = `
   .show-sold-toggle{display:flex;align-items:center;gap:.5rem;font-size:.75rem;color:${P.muted};cursor:pointer;padding:.4rem .8rem;border:1px solid ${P.border};border-radius:20px;background:transparent;font-family:'Jost',sans-serif;transition:all .2s;white-space:nowrap}
   .show-sold-toggle:hover{border-color:${P.accent};color:${P.accent}}
   .show-sold-toggle.active{border-color:${P.accent};color:${P.accent};background:rgba(201,169,110,.08)}
+  .image-gallery{display:flex;gap:.5rem;overflow-x:auto;margin-bottom:1.1rem;padding-bottom:.25rem}
+  .image-gallery img{height:180px;width:auto;min-width:180px;object-fit:cover;border-radius:8px;cursor:zoom-in;flex-shrink:0;transition:opacity .2s}
+  .image-gallery img:hover{opacity:.85}
+  .image-gallery-single{width:100%;height:210px;object-fit:cover;border-radius:10px;cursor:zoom-in}
+  .multi-upload-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-top:.5rem}
+  .multi-upload-thumb{position:relative;aspect-ratio:1;border-radius:7px;overflow:hidden}
+  .multi-upload-thumb img{width:100%;height:100%;object-fit:cover}
+  .multi-upload-remove{position:absolute;top:.25rem;right:.25rem;background:rgba(0,0,0,.6);border:none;color:white;border-radius:50%;width:20px;height:20px;font-size:.75rem;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
+  .landing{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:3rem 2rem;position:relative}
+  .landing::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:600px;height:2px;background:linear-gradient(90deg,transparent,${P.accent},transparent)}
+  .landing-schools{display:flex;gap:.65rem;flex-wrap:wrap;justify-content:center;margin:1.5rem 0}
+  .landing-features{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;max-width:700px;margin:2rem auto;text-align:left}
+  @media(max-width:600px){.landing-features{grid-template-columns:1fr}}
+  .landing-feature{padding:1rem;background:${P.surface};border:1px solid ${P.border};border-radius:10px}
+  .landing-feature-icon{font-size:1.4rem;margin-bottom:.5rem}
+  .landing-feature-title{font-size:.82rem;font-weight:500;color:${P.text};margin-bottom:.25rem}
+  .landing-feature-desc{font-size:.75rem;color:${P.muted};line-height:1.5}
+  .general-badge{display:inline-flex;align-items:center;gap:.4rem;padding:.2rem .6rem;background:rgba(138,122,158,.12);border:1px solid rgba(138,122,158,.3);border-radius:12px;font-size:.65rem;color:${P.muted};text-transform:uppercase;letter-spacing:.08em}
   .card-image-wrap{position:relative;cursor:zoom-in}
 
   /* MODALS */
@@ -333,7 +351,7 @@ export default function TutuTrade() {
   const [lightboxImage, setLightboxImage] = useState(null);
   const [authForm, setAuthForm] = useState({ name:"", email:"", password:"", schoolCode:"" });
   const [authError, setAuthError] = useState("");
-  const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", condition:"", price:"", description:"", image:null, schoolId:"" });
+  const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", condition:"", price:"", description:"", image:null, images:[], schoolId:"" });
   const [createError, setCreateError] = useState("");
   const [editingAd, setEditingAd] = useState(null);
   const [adForm, setAdForm] = useState({ title:"", tagline:"", url:"", slot:"top", active:true, image:null });
@@ -464,17 +482,46 @@ export default function TutuTrade() {
     reader.readAsDataURL(file);
   };
 
+  const handleMultiImageUpload = (e) => {
+    const files = Array.from(e.target.files).slice(0, 5);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = ev => setCreateForm(f => ({
+        ...f,
+        images: [...(f.images || []).slice(0, 4), ev.target.result],
+        image: f.image || ev.target.result, // first image is also the main image
+      }));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index) => {
+    setCreateForm(f => {
+      const newImages = f.images.filter((_, i) => i !== index);
+      return { ...f, images: newImages, image: newImages[0] || null };
+    });
+  };
+
   const handleCreate = async () => {
     setCreateError("");
     const { title, style, size, condition, price, schoolId } = createForm;
     if (!title || !style || !size || !condition || !price) return setCreateError("Please fill in all required fields.");
-    if (!schoolId) return setCreateError("Please select which school to list under.");
     if (isNaN(price) || Number(price) <= 0) return setCreateError("Please enter a valid price.");
-    const school = userSchools.find(s => s.school_id === schoolId);
-    const { error } = await supabase.from("listings").insert([{ title, style, size, condition, price: Number(price), description: createForm.description, image: createForm.image, seller_name: user.user_metadata?.full_name || user.email, seller_email: user.email, school_name: school?.school_name || "", school_id: schoolId }]);
+    const isGeneral = schoolId === "general";
+    const school = isGeneral ? null : userSchools.find(s => s.school_id === schoolId);
+    const { error } = await supabase.from("listings").insert([{
+      title, style, size, condition, price: Number(price),
+      description: createForm.description,
+      image: createForm.image,
+      images: createForm.images || [],
+      seller_name: user.user_metadata?.full_name || user.email,
+      seller_email: user.email,
+      school_name: isGeneral ? "General" : (school?.school_name || ""),
+      school_id: isGeneral ? null : (schoolId || null),
+    }]);
     if (error) return setCreateError("Failed to create listing. Please try again.");
     await loadListings();
-    setCreateForm({ title:"", style:"", size:"", condition:"", price:"", description:"", paypalEmail:"", image:null, schoolId:"" });
+    setCreateForm({ title:"", style:"", size:"", condition:"", price:"", description:"", image:null, images:[], schoolId:"" });
     closeModal(); setSuccess("Your listing is now live!");
   };
 
@@ -578,8 +625,13 @@ export default function TutuTrade() {
     setCopiedLink(code); setTimeout(() => setCopiedLink(null), 2000);
   };
 
+  const userSchoolIds = userSchools.map(us => us.school_id);
+
   const filtered = listings.filter(l => {
     if (view === "mylistings") return l.seller_email === user?.email;
+    if (!user) return false;
+    // Show general listings (no school) + listings from user's schools
+    if (l.school_id && !userSchoolIds.includes(l.school_id)) return false;
     if (!showSold && l.sold) return false;
     const q = filters.search.toLowerCase();
     if (q && !l.title?.toLowerCase().includes(q) && !l.description?.toLowerCase().includes(q)) return false;
@@ -965,9 +1017,42 @@ export default function TutuTrade() {
             </div>
           </div>
 
+        ) : !user ? (
+          /* ── LANDING PAGE for logged-out users ── */
+          <div className="landing">
+            <div className="hero-eyebrow">✦ TutuTrade ✦</div>
+            <h1 className="hero-title">Buy & sell <em>beautiful</em><br/>dancewear</h1>
+            <p className="hero-sub">A private marketplace for dance school communities. Buy and sell costumes, shoes and accessories with other parents at your school.</p>
+            <div style={{display:"flex",gap:"1rem",flexWrap:"wrap",justifyContent:"center",marginBottom:"1.5rem"}}>
+              <button className="btn btn-primary" style={{padding:".75rem 2rem",fontSize:".9rem"}} onClick={() => { setAuthTab("register"); setModal("auth"); }}>Join your school</button>
+              <button className="btn btn-ghost" style={{padding:".75rem 2rem",fontSize:".9rem"}} onClick={() => { setAuthTab("login"); setModal("auth"); }}>Sign in</button>
+            </div>
+            {schools.length > 0 && (
+              <div>
+                <div style={{fontSize:".72rem",textTransform:"uppercase",letterSpacing:".15em",color:P.muted,marginBottom:".75rem"}}>Schools on TutuTrade</div>
+                <div className="landing-schools">
+                  {schools.map(s => {
+                    const sc = s.color || P.accent;
+                    return (
+                      <div key={s.id} style={{display:"inline-flex",alignItems:"center",gap:".5rem",padding:".35rem .9rem",background:hexToRgba(sc,0.08),border:`1px solid ${hexToRgba(sc,0.3)}`,borderRadius:20,fontSize:".78rem",color:sc}}>
+                        <span style={{width:7,height:7,borderRadius:"50%",background:sc,display:"inline-block"}}/>
+                        {s.name}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <div className="landing-features">
+              <div className="landing-feature"><div className="landing-feature-icon">🔒</div><div className="landing-feature-title">Private & secure</div><div className="landing-feature-desc">Only parents from your dance school can see listings</div></div>
+              <div className="landing-feature"><div className="landing-feature-icon">💰</div><div className="landing-feature-title">Save money</div><div className="landing-feature-desc">Buy pre-loved costumes at a fraction of the original price</div></div>
+              <div className="landing-feature"><div className="landing-feature-icon">🩰</div><div className="landing-feature-title">Dance community</div><div className="landing-feature-desc">Trade with parents you already know and trust</div></div>
+            </div>
+          </div>
+
         ) : (
           <>
-            {/* HERO with clickable school badges */}
+            {/* HERO with clickable school badges — logged in users only */}
             {view === "browse" && (
               <div className="hero">
                 <div className="hero-eyebrow">✦ TutuTrade ✦</div>
@@ -977,7 +1062,7 @@ export default function TutuTrade() {
                   {schools.map(s => {
                     const sc = s.color || P.accent;
                     const isActive = filters.school === s.id;
-                    const count = listings.filter(l => l.school_id === s.id).length;
+                    const count = listings.filter(l => l.school_id === s.id && userSchoolIds.includes(l.school_id)).length;
                     return (
                       <button
                         key={s.id}
@@ -1077,11 +1162,13 @@ export default function TutuTrade() {
                         <div className="card-body">
                           <div className="card-style-tag" style={{color:sc}}>{l.style}</div>
                           <div className="card-title">{l.title}</div>
-                          <div className="card-meta">
-                            Size: {l.size} ·{" "}
-                            <span style={{color:sc,cursor:"pointer"}} onClick={e=>{e.stopPropagation();handleClickSchoolBadge(l.school_id);}}>
-                              {l.school_name}
-                            </span>
+                          <div className="card-meta" style={{display:"flex",alignItems:"center",gap:".4rem",flexWrap:"wrap"}}>
+                            <span>Size: {l.size}</span>
+                            {l.school_id
+                              ? <span>· <span style={{color:sc,cursor:"pointer"}} onClick={e=>{e.stopPropagation();handleClickSchoolBadge(l.school_id);}}>{l.school_name}</span></span>
+                              : <span className="general-badge">🌐 General</span>
+                            }
+                            {l.images && l.images.length > 1 && <span style={{fontSize:".65rem",color:P.muted}}>📷 {l.images.length}</span>}
                           </div>
                           <div className="card-footer">
                             <div className="price" style={{textDecoration:l.sold?"line-through":"none",opacity:l.sold?0.5:1}}>£{l.price} <span>GBP</span></div>
@@ -1139,11 +1226,13 @@ export default function TutuTrade() {
               {createError && <div className="form-error" style={{marginBottom:"1rem"}}>⚠ {createError}</div>}
               <div className="form-group"><label className="form-label">Item title *</label><input className="form-input" placeholder="e.g. Pink Ballet Tutu" value={createForm.title} onChange={e=>setCreateForm(f=>({...f,title:e.target.value}))}/></div>
               <div className="form-group">
-                <label className="form-label">List under school *</label>
+                <label className="form-label">Visibility *</label>
                 <select className="form-select" value={createForm.schoolId} onChange={e=>setCreateForm(f=>({...f,schoolId:e.target.value}))}>
-                  <option value="">Select school...</option>
-                  {userSchools.map(us => <option key={us.school_id} value={us.school_id}>{us.school_name}</option>)}
+                  <option value="">Select...</option>
+                  <option value="general">🌐 General — visible to all TutuTrade members</option>
+                  {userSchools.map(us => <option key={us.school_id} value={us.school_id}>🏫 {us.school_name} only</option>)}
                 </select>
+                <div className="form-hint">General listings are visible to all logged-in users. School listings are only visible to that school's members.</div>
               </div>
               <div className="form-row">
                 <div className="form-group"><label className="form-label">Dance style *</label><select className="form-select" value={createForm.style} onChange={e=>setCreateForm(f=>({...f,style:e.target.value}))}><option value="">Select...</option>{DANCE_STYLES.map(s=><option key={s}>{s}</option>)}</select></div>
@@ -1165,8 +1254,21 @@ export default function TutuTrade() {
               })()}
               <div className="form-group"><label className="form-label">Description</label><textarea className="form-textarea" placeholder="Describe the item, any wear, original price..." value={createForm.description} onChange={e=>setCreateForm(f=>({...f,description:e.target.value}))}/></div>
               <div className="form-group">
-                <label className="form-label">Photo</label>
-                <label className="upload-area"><input type="file" accept="image/*" onChange={e=>handleImageUpload(e,setCreateForm)}/>{createForm.image?<img src={createForm.image} className="upload-preview" alt="preview"/>:<div>📷 Click to upload photo</div>}</label>
+                <label className="form-label">Photos (up to 5)</label>
+                <label className="upload-area">
+                  <input type="file" accept="image/*" multiple onChange={handleMultiImageUpload}/>
+                  <div>📷 Click to upload photos (select multiple)</div>
+                </label>
+                {createForm.images && createForm.images.length > 0 && (
+                  <div className="multi-upload-grid" style={{marginTop:".5rem"}}>
+                    {createForm.images.map((img, i) => (
+                      <div key={i} className="multi-upload-thumb">
+                        <img src={img} alt={`photo ${i+1}`}/>
+                        <button className="multi-upload-remove" onClick={() => removeImage(i)}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={handleCreate}>Publish listing</button>
             </div>
@@ -1185,7 +1287,18 @@ export default function TutuTrade() {
             <div className="modal" onClick={e=>e.stopPropagation()} style={{borderTop:`3px solid ${sc}`}}>
               <div className="modal-header"><div className="modal-title">{selectedListing.title}</div><button className="modal-close" onClick={closeModal}>×</button></div>
               <div className="modal-body">
-                <div className="detail-image" style={{cursor:selectedListing.image?"zoom-in":"default"}} onClick={()=>selectedListing.image&&setLightboxImage(selectedListing.image)}>{selectedListing.image?<img src={selectedListing.image} alt={selectedListing.title}/>:styleEmoji[selectedListing.style]||"👗"}</div>
+                {/* Image gallery */}
+                {selectedListing.images && selectedListing.images.length > 1 ? (
+                  <div className="image-gallery">
+                    {selectedListing.images.map((img, i) => (
+                      <img key={i} src={img} alt={`${selectedListing.title} ${i+1}`} onClick={() => setLightboxImage(img)}/>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="detail-image" style={{cursor:(selectedListing.image||selectedListing.images?.[0])?"zoom-in":"default"}} onClick={()=>{const img=selectedListing.image||selectedListing.images?.[0];if(img)setLightboxImage(img);}}>
+                    {(selectedListing.image||selectedListing.images?.[0])?<img src={selectedListing.image||selectedListing.images?.[0]} alt={selectedListing.title} className="image-gallery-single"/>:styleEmoji[selectedListing.style]||"👗"}
+                  </div>
+                )}
                 <div className="detail-tags">
                   <span className="tag tag-style">{selectedListing.style}</span>
                   <span className="tag tag-size">{selectedListing.size}</span>
@@ -1195,7 +1308,12 @@ export default function TutuTrade() {
                 <p className="detail-desc">{selectedListing.description||"No description provided."}</p>
                 <div className="seller-info">
                   <div><strong>Seller:</strong> {selectedListing.seller_name}</div>
-                  <div style={{marginTop:".18rem",fontSize:".73rem"}}>📍 <span style={{color:sc}}>{selectedListing.school_name}</span></div>
+                  <div style={{marginTop:".18rem",fontSize:".73rem"}}>
+                    📍 {selectedListing.school_id
+                      ? <span style={{color:sc}}>{selectedListing.school_name}</span>
+                      : <span className="general-badge">🌐 General listing</span>
+                    }
+                  </div>
                 </div>
                 {!isOwner && (
                   <div className="commission-box">
