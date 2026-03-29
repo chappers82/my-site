@@ -33,14 +33,15 @@ const sendSoldEmail = async ({ listing, commissionPct }) => {
               <tr><td style="padding:.5rem;color:#8a7a9e;border-bottom:1px solid #2e2340">Item</td><td style="padding:.5rem;border-bottom:1px solid #2e2340"><strong>${listing.title}</strong></td></tr>
               <tr><td style="padding:.5rem;color:#8a7a9e;border-bottom:1px solid #2e2340">Seller</td><td style="padding:.5rem;border-bottom:1px solid #2e2340">${listing.seller_name}</td></tr>
               <tr><td style="padding:.5rem;color:#8a7a9e;border-bottom:1px solid #2e2340">Seller email</td><td style="padding:.5rem;border-bottom:1px solid #2e2340">${listing.seller_email}</td></tr>
+              <tr><td style="padding:.5rem;color:#8a7a9e;border-bottom:1px solid #2e2340">Seller PayPal</td><td style="padding:.5rem;border-bottom:1px solid #2e2340;color:#6fcf97"><strong>${listing.seller_paypal || listing.seller_email}</strong></td></tr>
               <tr><td style="padding:.5rem;color:#8a7a9e;border-bottom:1px solid #2e2340">School</td><td style="padding:.5rem;border-bottom:1px solid #2e2340">${listing.school_name}</td></tr>
               <tr><td style="padding:.5rem;color:#8a7a9e;border-bottom:1px solid #2e2340">Sale price</td><td style="padding:.5rem;border-bottom:1px solid #2e2340">£${listing.price}</td></tr>
               <tr><td style="padding:.5rem;color:#8a7a9e;border-bottom:1px solid #2e2340">Your commission (${commissionPct}%)</td><td style="padding:.5rem;border-bottom:1px solid #2e2340;color:#c9a96e"><strong>£${commission}</strong></td></tr>
               <tr><td style="padding:.5rem;color:#8a7a9e">Pay seller</td><td style="padding:.5rem;color:#6fcf97;font-size:1.2rem"><strong>£${sellerReceives}</strong></td></tr>
             </table>
-            <a href="https://www.paypal.com/send?recipient=${listing.seller_email}&amount=${sellerReceives}" 
+            <a href="https://www.paypal.com/send?recipient=${listing.seller_paypal || listing.seller_email}&amount=${sellerReceives}" 
                style="display:inline-block;padding:.75rem 1.5rem;background:#0070ba;color:white;border-radius:8px;text-decoration:none;font-weight:500">
-              Pay £${sellerReceives} via PayPal →
+              Pay £${sellerReceives} to ${listing.seller_paypal || listing.seller_email} via PayPal →
             </a>
             <p style="color:#8a7a9e;font-size:.75rem;margin-top:1.5rem">This email was sent automatically by TutuTrade when the item was marked as sold.</p>
           </div>
@@ -570,7 +571,7 @@ export default function TutuTrade() {
   const [editingSchoolColor, setEditingSchoolColor] = useState(null);
   const [addSchoolCode, setAddSchoolCode] = useState("");
   const [addSchoolError, setAddSchoolError] = useState("");
-  const [accountForm, setAccountForm] = useState({ email:"", password:"", confirmPassword:"", displayName:"" });
+  const [accountForm, setAccountForm] = useState({ email:"", password:"", confirmPassword:"", displayName:"", paypalEmail:"" });
   const [accountMsg, setAccountMsg] = useState("");
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
   const [copiedLink, setCopiedLink] = useState(null);
@@ -734,6 +735,18 @@ export default function TutuTrade() {
     if (data?.user) setUser(data.user);
   };
 
+  const handleSavePaypalEmail = async () => {
+    setAccountMsg("");
+    if (!accountForm.paypalEmail.trim()) return setAccountMsg("Please enter your PayPal email.");
+    if (!accountForm.paypalEmail.includes("@")) return setAccountMsg("Please enter a valid email address.");
+    const { error } = await supabase.auth.updateUser({ data: { paypal_email: accountForm.paypalEmail.trim() } });
+    if (error) return setAccountMsg(`Error: ${error.message}`);
+    setAccountMsg("✓ PayPal email saved. It will be used for all future payouts.");
+    setAccountForm(f => ({ ...f, paypalEmail: "" }));
+    const { data } = await supabase.auth.getUser();
+    if (data?.user) setUser(data.user);
+  };
+
   const handleUpdatePassword = async () => {
     setAccountMsg("");
     if (!accountForm.password) return setAccountMsg("Please enter a new password.");
@@ -794,6 +807,7 @@ export default function TutuTrade() {
       images: createForm.images || [],
       seller_name: user.user_metadata?.full_name || user.email,
       seller_email: user.email,
+      seller_paypal: user.user_metadata?.paypal_email || null,
       school_name: isGeneral ? "General" : (school?.school_name || ""),
       school_id: isGeneral ? null : (schoolId || null),
     }]);
@@ -1572,6 +1586,21 @@ export default function TutuTrade() {
                 <div style={{padding:"1rem",background:P.surface,border:`1px solid ${P.border}`,borderRadius:10,marginBottom:".75rem"}}>
                   <div className="form-label" style={{marginBottom:".25rem"}}>Change Display Name</div>
                   <div style={{fontSize:".73rem",color:P.muted,marginBottom:".65rem"}}>Currently: <strong style={{color:P.accentSoft}}>{user.user_metadata?.full_name || user.email}</strong></div>
+
+                <div style={{padding:"1rem",background:P.surface,border:`1px solid ${P.border}`,borderRadius:10,marginBottom:".75rem"}}>
+                  <div className="form-label" style={{marginBottom:".25rem"}}>💰 PayPal Email for Payouts</div>
+                  <div style={{fontSize:".73rem",color:P.muted,marginBottom:".65rem"}}>
+                    {user.user_metadata?.paypal_email
+                      ? <>Currently: <strong style={{color:P.success}}>{user.user_metadata.paypal_email}</strong></>
+                      : <span style={{color:"#ffb400"}}>⚠ Not set — add your PayPal email so you can receive payouts quickly</span>
+                    }
+                  </div>
+                  <div style={{display:"flex",gap:".5rem"}}>
+                    <input className="form-input" type="email" placeholder="your-paypal@email.com" value={accountForm.paypalEmail} onChange={e=>setAccountForm(f=>({...f,paypalEmail:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&handleSavePaypalEmail()} style={{flex:1}}/>
+                    <button className="btn btn-primary btn-sm" onClick={handleSavePaypalEmail}>Save</button>
+                  </div>
+                  <div className="form-hint">This is used to send you your payout when an item sells. It stays private — only the site admin sees it.</div>
+                </div>
                   <div style={{display:"flex",gap:".5rem"}}>
                     <input className="form-input" type="text" placeholder="Your new display name" value={accountForm.displayName} onChange={e=>setAccountForm(f=>({...f,displayName:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&handleUpdateDisplayName()} style={{flex:1}}/>
                     <button className="btn btn-primary btn-sm" onClick={handleUpdateDisplayName}>Update</button>
