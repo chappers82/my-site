@@ -22,7 +22,7 @@ const sendSoldEmail = async ({ listing, commissionPct }) => {
         "Authorization": `Bearer ${import.meta.env.VITE_RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "TutuTrade <onboarding@resend.dev>",
+        from: "TutuTrade <hello@tututrade.co.uk>",
         to: [ADMIN_EMAIL],
         subject: `💰 Sale: ${listing.title} — £${listing.price}`,
         html: `
@@ -57,7 +57,7 @@ const sendResendEmail = async ({ to, subject, html }) => {
     await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_RESEND_API_KEY}` },
-      body: JSON.stringify({ from: "TutuTrade <onboarding@resend.dev>", to: [to], subject, html }),
+      body: JSON.stringify({ from: "TutuTrade <hello@tututrade.co.uk>", to: [to], subject, html }),
     });
   } catch (e) { console.error("Notification email error:", e); }
 };
