@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
 
 // ─── EMAIL ────────────────────────────────────────────────────────────────
@@ -42,6 +42,8 @@ const sendSoldEmail = async ({ listing, commissionPct }) => {
 
 const DANCE_STYLES = ["Ballet","Jazz","Tap","Contemporary","Hip Hop","Musical Theatre","Acro","Irish","Ballroom","Lyrical"];
 const SIZES = ["Age 2-3","Age 3-4","Age 4-5","Age 5-6","Age 6-7","Age 7-8","Age 8-9","Age 9-10","Age 10-11","Age 11-12","Teen XS","Teen S","Teen M","Teen L","Adult XS","Adult S","Adult M","Adult L","Adult XL"];
+const SHOE_SIZES = ["UK 6 (Infant)","UK 7 (Infant)","UK 8 (Infant)","UK 9 (Infant)","UK 10 (Infant)","UK 11 (Infant)","UK 12 (Infant)","UK 13 (Infant)","UK 1","UK 2","UK 3","UK 4","UK 5","UK 6","UK 7","UK 8","UK 9","UK 10"];
+const ITEM_TYPES = ["Clothing","Footwear","Accessories / Other"];
 const CONDITIONS = ["New with tags","Excellent","Good","Well loved"];
 const styleEmoji = {Ballet:"🩰",Jazz:"✨",Tap:"🎩",Contemporary:"🌊","Hip Hop":"🎤","Musical Theatre":"🎭",Acro:"🤸",Irish:"☘️",Ballroom:"💃",Lyrical:"🕊️"};
 const conditionKey = {"New with tags":"new","Excellent":"excellent","Good":"good","Well loved":"worn"};
@@ -298,7 +300,81 @@ const css = `
   ::-webkit-scrollbar{width:5px}
   ::-webkit-scrollbar-track{background:${P.bg}}
   ::-webkit-scrollbar-thumb{background:${P.border};border-radius:3px}
+
+  /* PIXIE DUST */
+  .pixie-canvas{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;}
+
+  /* COUNTDOWN */
+  .countdown-section{margin-bottom:1.5rem}
+  .countdown-cards{display:flex;flex-direction:column;gap:.75rem}
+  .countdown-card{padding:1rem 1.25rem;border-radius:12px;border-left:4px solid;background:${P.surface};border-color:${P.border}}
+  .countdown-card-title{font-family:'Playfair Display',serif;font-size:1rem;color:${P.text};margin-bottom:.2rem}
+  .countdown-card-desc{font-size:.75rem;color:${P.muted};margin-bottom:.75rem}
+  .countdown-timer{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+  .countdown-unit{text-align:center;min-width:52px;padding:.4rem .6rem;border-radius:8px;background:${P.card}}
+  .countdown-num{font-family:'Playfair Display',serif;font-size:1.5rem;line-height:1;display:block}
+  .countdown-label{font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:${P.muted};display:block;margin-top:.15rem}
+  .countdown-sep{font-size:1.2rem;color:${P.muted};opacity:.5;align-self:flex-start;padding-top:.35rem}
+  .countdown-expired{font-size:.82rem;color:${P.muted};font-style:italic}
+
+  /* ADMIN EVENTS */
+  .event-item{display:flex;align-items:flex-start;justify-content:space-between;padding:.75rem;background:${P.card};border:1px solid ${P.border};border-radius:8px;margin-bottom:.5rem;gap:.75rem}
+  .event-item-info{flex:1}
+  .event-item-title{font-size:.88rem;color:${P.text};font-weight:500}
+  .event-item-meta{font-size:.73rem;color:${P.muted};margin-top:.2rem}
 `;
+
+function PixieDust() {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const particles = Array.from({length: 60}, (_, i) => ({
+      x: Math.random() * 120,
+      y: Math.random() * -200 - i * 8,
+      vx: Math.random() * 1.5 - 0.3,
+      vy: Math.random() * 1.2 + 0.4,
+      size: Math.random() * 3 + 1,
+      opacity: Math.random(),
+      fade: Math.random() * 0.015 + 0.005,
+      hue: Math.random() * 30 + 35,
+    }));
+    let raf;
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach(p => {
+        p.x += p.vx; p.y += p.vy; p.opacity -= p.fade;
+        if (p.opacity <= 0 || p.y > canvas.height) {
+          p.x = Math.random() * 120; p.y = -10;
+          p.vx = Math.random() * 1.5 - 0.3; p.vy = Math.random() * 1.2 + 0.4;
+          p.opacity = 1; p.size = Math.random() * 3 + 1;
+        }
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.opacity);
+        ctx.fillStyle = `hsl(${p.hue}, 85%, 65%)`;
+        ctx.shadowBlur = 6; ctx.shadowColor = `hsl(${p.hue}, 100%, 75%)`;
+        ctx.beginPath();
+        // Draw star shape
+        for (let j = 0; j < 5; j++) {
+          const angle = (j * 4 * Math.PI) / 5 - Math.PI / 2;
+          const r = j % 2 === 0 ? p.size : p.size * 0.4;
+          j === 0 ? ctx.moveTo(p.x + r * Math.cos(angle), p.y + r * Math.sin(angle))
+                  : ctx.lineTo(p.x + r * Math.cos(angle), p.y + r * Math.sin(angle));
+        }
+        ctx.closePath(); ctx.fill(); ctx.restore();
+      });
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    window.addEventListener("resize", resize);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+  }, []);
+  return <canvas ref={canvasRef} className="pixie-canvas"/>;
+}
 
 function AdBanner({ ad }) {
   if (!ad || !ad.active) return null;
@@ -335,12 +411,16 @@ export default function TutuTrade() {
   const [listings, setListings] = useState([]);
   const [ads, setAds] = useState([]);
   const [schools, setSchools] = useState([]);
+  const [events, setEvents] = useState([]);
   const [userSchools, setUserSchools] = useState([]);
   const [allUserSchools, setAllUserSchools] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [commissionPct, setCommissionPct] = useState(1.5);
   const [view, setView] = useState("browse");
   const [adminTab, setAdminTab] = useState("overview");
+  const [eventForm, setEventForm] = useState({ title:"", event_date:"", description:"", school_id:"" });
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [, setTick] = useState(0);
   const [modal, setModal] = useState(null);
   const [selectedListing, setSelectedListing] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -351,7 +431,7 @@ export default function TutuTrade() {
   const [lightboxImage, setLightboxImage] = useState(null);
   const [authForm, setAuthForm] = useState({ name:"", email:"", password:"", schoolCode:"" });
   const [authError, setAuthError] = useState("");
-  const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", condition:"", price:"", description:"", image:null, images:[], schoolId:"" });
+  const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolId:"" });
   const [createError, setCreateError] = useState("");
   const [editingAd, setEditingAd] = useState(null);
   const [adForm, setAdForm] = useState({ title:"", tagline:"", url:"", slot:"top", active:true, image:null });
@@ -385,8 +465,9 @@ export default function TutuTrade() {
       if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); }
       else { setUserSchools([]); setIsAdmin(false); }
     });
-    loadListings(); loadAds(); loadSchools(); loadCommission();
-    return () => subscription.unsubscribe();
+    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents();
+    const ticker = setInterval(() => setTick(t => t + 1), 1000);
+    return () => { subscription.unsubscribe(); clearInterval(ticker); };
   }, []);
 
   useEffect(() => { if (isAdmin) { loadAllUserSchools(); loadAllUsers(); } }, [isAdmin]);
@@ -395,6 +476,29 @@ export default function TutuTrade() {
   const loadAds = async () => { const { data } = await supabase.from("ads").select("*").order("created_at",{ascending:false}); if (data) setAds(data); };
   const loadSchools = async () => { const { data } = await supabase.from("schools").select("*").order("name"); if (data) setSchools(data); };
   const loadCommission = async () => { const { data } = await supabase.from("settings").select("value").eq("key","commission_pct").single(); if (data) setCommissionPct(parseFloat(data.value)); };
+  const loadEvents = async () => { const { data } = await supabase.from("events").select("*").order("event_date"); if (data) setEvents(data); };
+
+  const handleSaveEvent = async () => {
+    if (!eventForm.title || !eventForm.event_date || !eventForm.school_id) return;
+    if (editingEvent) {
+      await supabase.from("events").update({ title:eventForm.title, event_date:eventForm.event_date, description:eventForm.description }).eq("id", editingEvent);
+    } else {
+      await supabase.from("events").insert([{ title:eventForm.title, event_date:eventForm.event_date, description:eventForm.description, school_id:eventForm.school_id }]);
+    }
+    await loadEvents(); setEventForm({ title:"", event_date:"", description:"", school_id:"" }); setEditingEvent(null); setSuccess("Event saved!");
+  };
+
+  const handleDeleteEvent = async (id) => { await supabase.from("events").delete().eq("id", id); await loadEvents(); };
+
+  const getCountdown = (dateStr) => {
+    const diff = new Date(dateStr) - new Date();
+    if (diff <= 0) return null;
+    const d = Math.floor(diff / 86400000);
+    const h = Math.floor((diff % 86400000) / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    return { d, h, m, s };
+  };
   const loadUserSchools = async (email) => { const { data } = await supabase.from("user_schools").select("*").eq("user_email",email); if (data) setUserSchools(data); };
   const loadAllUserSchools = async () => { const { data } = await supabase.from("user_schools").select("*"); if (data) setAllUserSchools(data); };
   const loadAllUsers = async () => { const { data } = await supabase.from("user_profiles").select("*"); if (data) setAllUsers(data); };
@@ -521,7 +625,7 @@ export default function TutuTrade() {
     }]);
     if (error) return setCreateError("Failed to create listing. Please try again.");
     await loadListings();
-    setCreateForm({ title:"", style:"", size:"", condition:"", price:"", description:"", image:null, images:[], schoolId:"" });
+    setCreateForm({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolId:"" });
     closeModal(); setSuccess("Your listing is now live!");
   };
 
@@ -652,6 +756,7 @@ export default function TutuTrade() {
   return (
     <div className="app">
       <style>{css}</style>
+      <PixieDust />
 
       {/* HEADER */}
       <header className="header">
@@ -694,7 +799,7 @@ export default function TutuTrade() {
               <div className="admin-stat"><div className="admin-stat-value">£{totalRevenue.toFixed(2)}</div><div className="admin-stat-label">Est. Revenue</div></div>
             </div>
             <div className="admin-tabs">
-              {["overview","schools","users","ads","listings"].map(t => (
+              {["overview","schools","events","users","ads","listings"].map(t => (
                 <button key={t} className={`admin-tab ${adminTab===t?"active":""}`} onClick={() => setAdminTab(t)}>
                   {t.charAt(0).toUpperCase()+t.slice(1)}
                 </button>
@@ -811,6 +916,74 @@ export default function TutuTrade() {
                   );
                 })}
                 {!schools.length && <p style={{color:P.muted,fontSize:".84rem"}}>No schools yet.</p>}
+              </div>
+            )}
+
+            {adminTab === "events" && (
+              <div className="admin-section">
+                <div className="admin-section-title">📅 School Events & Countdowns</div>
+                <p style={{fontSize:".82rem",color:P.muted,marginBottom:"1.25rem"}}>Add events per school. Members see a live countdown when they filter by that school.</p>
+
+                <div style={{padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10,marginBottom:"1.5rem"}}>
+                  <div style={{fontSize:".82rem",fontWeight:500,color:P.text,marginBottom:"1rem"}}>{editingEvent ? "Edit Event" : "Add New Event"}</div>
+                  <div className="form-group">
+                    <label className="form-label">School *</label>
+                    <select className="form-select" value={eventForm.school_id} onChange={e=>setEventForm(f=>({...f,school_id:e.target.value}))}>
+                      <option value="">Select school...</option>
+                      {schools.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Event name *</label>
+                    <input className="form-input" placeholder="e.g. Spring Dance Festival" value={eventForm.title} onChange={e=>setEventForm(f=>({...f,title:e.target.value}))}/>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Date & time *</label>
+                    <input className="form-input" type="datetime-local" value={eventForm.event_date} onChange={e=>setEventForm(f=>({...f,event_date:e.target.value}))}/>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Description (optional)</label>
+                    <input className="form-input" placeholder="e.g. Annual showcase at the Town Hall" value={eventForm.description} onChange={e=>setEventForm(f=>({...f,description:e.target.value}))}/>
+                  </div>
+                  <div style={{display:"flex",gap:".5rem"}}>
+                    <button className="btn btn-primary btn-sm" onClick={handleSaveEvent}>{editingEvent ? "Save changes" : "+ Add event"}</button>
+                    {editingEvent && <button className="btn btn-ghost btn-sm" onClick={() => { setEditingEvent(null); setEventForm({title:"",event_date:"",description:"",school_id:""}); }}>Cancel</button>}
+                  </div>
+                </div>
+
+                {schools.map(s => {
+                  const schoolEvents = events.filter(e => e.school_id === s.id);
+                  if (!schoolEvents.length) return null;
+                  const sc = s.color || P.accent;
+                  return (
+                    <div key={s.id} style={{marginBottom:"1.25rem"}}>
+                      <div style={{fontSize:".78rem",fontWeight:500,color:sc,marginBottom:".5rem",display:"flex",alignItems:"center",gap:".4rem"}}>
+                        <span style={{width:8,height:8,borderRadius:"50%",background:sc,display:"inline-block"}}/>
+                        {s.name}
+                      </div>
+                      {schoolEvents.map(ev => {
+                        const cd = getCountdown(ev.event_date);
+                        return (
+                          <div key={ev.id} className="event-item">
+                            <div className="event-item-info">
+                              <div className="event-item-title">{ev.title}</div>
+                              <div className="event-item-meta">
+                                {new Date(ev.event_date).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}
+                                {cd ? <span style={{color:sc,marginLeft:".5rem"}}>— {cd.d}d {cd.h}h {cd.m}m away</span> : <span style={{color:"#e07070",marginLeft:".5rem"}}>— Passed</span>}
+                              </div>
+                              {ev.description && <div style={{fontSize:".72rem",color:P.muted,marginTop:".15rem"}}>{ev.description}</div>}
+                            </div>
+                            <div style={{display:"flex",gap:".4rem",flexShrink:0}}>
+                              <button className="btn btn-ghost btn-sm" onClick={() => { setEditingEvent(ev.id); setEventForm({title:ev.title,event_date:ev.event_date.slice(0,16),description:ev.description||"",school_id:ev.school_id}); }}>Edit</button>
+                              <button className="btn btn-danger btn-sm" onClick={() => handleDeleteEvent(ev.id)}>Remove</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+                {events.length === 0 && <p style={{color:P.muted,fontSize:".84rem"}}>No events yet. Add one above!</p>}
               </div>
             )}
 
@@ -1105,16 +1278,50 @@ export default function TutuTrade() {
             {view === "browse" && activeSchoolFilter && (() => {
               const sc = activeSchoolFilter.color || P.accent;
               const count = filtered.length;
+              const schoolEvents = events.filter(e => e.school_id === activeSchoolFilter.id && new Date(e.event_date) > new Date()).slice(0, 5);
               return (
-                <div className="school-filter-banner" style={{background:hexToRgba(sc,0.1),border:`1px solid ${hexToRgba(sc,0.3)}`}}>
-                  <div>
-                    <div className="school-filter-banner-name" style={{color:sc}}>{activeSchoolFilter.name}</div>
-                    <div className="school-filter-banner-sub" style={{color:sc}}>{count} listing{count!==1?"s":""} available</div>
+                <>
+                  <div className="school-filter-banner" style={{background:hexToRgba(sc,0.1),border:`1px solid ${hexToRgba(sc,0.3)}`}}>
+                    <div>
+                      <div className="school-filter-banner-name" style={{color:sc}}>{activeSchoolFilter.name}</div>
+                      <div className="school-filter-banner-sub" style={{color:sc}}>{count} listing{count!==1?"s":""} available</div>
+                    </div>
+                    <button className="btn btn-sm" style={{background:"transparent",color:sc,border:`1px solid ${hexToRgba(sc,0.4)}`}} onClick={() => setFilters(f=>({...f,school:""}))}>
+                      × Clear
+                    </button>
                   </div>
-                  <button className="btn btn-sm" style={{background:"transparent",color:sc,border:`1px solid ${hexToRgba(sc,0.4)}`}} onClick={() => setFilters(f=>({...f,school:""}))}>
-                    × Clear
-                  </button>
-                </div>
+                  {schoolEvents.length > 0 && (
+                    <div className="countdown-section">
+                      <div style={{fontSize:".7rem",textTransform:"uppercase",letterSpacing:".12em",color:sc,marginBottom:".75rem",opacity:.8}}>📅 Upcoming Events</div>
+                      <div className="countdown-cards">
+                        {schoolEvents.map(ev => {
+                          const cd = getCountdown(ev.event_date);
+                          return (
+                            <div key={ev.id} className="countdown-card" style={{borderLeftColor:sc,background:hexToRgba(sc,0.05)}}>
+                              <div className="countdown-card-title" style={{color:sc}}>{ev.title}</div>
+                              {ev.description && <div className="countdown-card-desc">{ev.description}</div>}
+                              {cd ? (
+                                <div className="countdown-timer">
+                                  {[["d","Days"],["h","Hours"],["m","Mins"],["s","Secs"]].map(([k,label],i) => (
+                                    <React.Fragment key={k}>
+                                      {i > 0 && <span className="countdown-sep">:</span>}
+                                      <div className="countdown-unit" style={{background:hexToRgba(sc,0.12)}}>
+                                        <span className="countdown-num" style={{color:sc}}>{String(cd[k]).padStart(2,"0")}</span>
+                                        <span className="countdown-label">{label}</span>
+                                      </div>
+                                    </React.Fragment>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="countdown-expired">Event has passed</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
               );
             })()}
 
@@ -1124,9 +1331,9 @@ export default function TutuTrade() {
               <div className="filters">
                 <input className="filter-input" placeholder="Search costumes..." value={filters.search} onChange={e => setFilters(f=>({...f,search:e.target.value}))}/>
                 <select className="filter-select" value={filters.school} onChange={e => setFilters(f=>({...f,school:e.target.value}))}><option value="">All schools</option>{schools.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
-                <select className="filter-select" value={filters.style} onChange={e => setFilters(f=>({...f,style:e.target.value}))}><option value="">All styles</option>{DANCE_STYLES.map(s=><option key={s}>{s}</option>)}</select>
-                <select className="filter-select" value={filters.size} onChange={e => setFilters(f=>({...f,size:e.target.value}))}><option value="">All sizes</option>{SIZES.map(s=><option key={s}>{s}</option>)}</select>
-                <select className="filter-select" value={filters.condition} onChange={e => setFilters(f=>({...f,condition:e.target.value}))}><option value="">Any condition</option>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select>
+                <select className="filter-select" value={filters.style} onChange={e => setFilters(f=>({...f,style:e.target.value}))}><option value="">All styles</option>{danceStyles.map(s=><option key={s}>{s}</option>)}</select>
+                <select className="filter-select" value={filters.size} onChange={e => setFilters(f=>({...f,size:e.target.value}))}><option value="">All sizes</option>{sizes.map(s=><option key={s}>{s}</option>)}</select>
+                <select className="filter-select" value={filters.condition} onChange={e => setFilters(f=>({...f,condition:e.target.value}))}><option value="">Any condition</option>{conditions.map(c=><option key={c}>{c}</option>)}</select>
                 <input className="filter-input" placeholder="Max price £" style={{minWidth:90,maxWidth:110}} value={filters.maxPrice} onChange={e => setFilters(f=>({...f,maxPrice:e.target.value}))}/>
               </div>
             )}
@@ -1235,11 +1442,39 @@ export default function TutuTrade() {
                 <div className="form-hint">General listings are visible to all logged-in users. School listings are only visible to that school's members.</div>
               </div>
               <div className="form-row">
-                <div className="form-group"><label className="form-label">Dance style *</label><select className="form-select" value={createForm.style} onChange={e=>setCreateForm(f=>({...f,style:e.target.value}))}><option value="">Select...</option>{DANCE_STYLES.map(s=><option key={s}>{s}</option>)}</select></div>
-                <div className="form-group"><label className="form-label">Size *</label><select className="form-select" value={createForm.size} onChange={e=>setCreateForm(f=>({...f,size:e.target.value}))}><option value="">Select...</option>{SIZES.map(s=><option key={s}>{s}</option>)}</select></div>
+                <div className="form-group"><label className="form-label">Dance style *</label><select className="form-select" value={createForm.style} onChange={e=>setCreateForm(f=>({...f,style:e.target.value}))}><option value="">Select...</option>{danceStyles.map(s=><option key={s}>{s}</option>)}</select></div>
+                <div className="form-group">
+                  <label className="form-label">Item type *</label>
+                  <select className="form-select" value={createForm.itemType} onChange={e=>setCreateForm(f=>({...f,itemType:e.target.value,size:""}))}>
+                    <option value="">Select...</option>
+                    {ITEM_TYPES.map(t=><option key={t}>{t}</option>)}
+                  </select>
+                </div>
               </div>
+              {createForm.itemType && (
+                <div className="form-group">
+                  <label className="form-label">
+                    {createForm.itemType === "Footwear" ? "Shoe size *" : createForm.itemType === "Clothing" ? "Clothing size *" : "Size"}
+                  </label>
+                  {createForm.itemType === "Accessories / Other" ? (
+                    <select className="form-select" value={createForm.size} onChange={e=>setCreateForm(f=>({...f,size:e.target.value}))}>
+                      <option value="N/A">N/A — not applicable</option>
+                    </select>
+                  ) : createForm.itemType === "Footwear" ? (
+                    <select className="form-select" value={createForm.size} onChange={e=>setCreateForm(f=>({...f,size:e.target.value}))}>
+                      <option value="">Select shoe size...</option>
+                      {SHOE_SIZES.map(s=><option key={s}>{s}</option>)}
+                    </select>
+                  ) : (
+                    <select className="form-select" value={createForm.size} onChange={e=>setCreateForm(f=>({...f,size:e.target.value}))}>
+                      <option value="">Select clothing size...</option>
+                      {sizes.map(s=><option key={s}>{s}</option>)}
+                    </select>
+                  )}
+                </div>
+              )}
               <div className="form-row">
-                <div className="form-group"><label className="form-label">Condition *</label><select className="form-select" value={createForm.condition} onChange={e=>setCreateForm(f=>({...f,condition:e.target.value}))}><option value="">Select...</option>{CONDITIONS.map(c=><option key={c}>{c}</option>)}</select></div>
+                <div className="form-group"><label className="form-label">Condition *</label><select className="form-select" value={createForm.condition} onChange={e=>setCreateForm(f=>({...f,condition:e.target.value}))}><option value="">Select...</option>{conditions.map(c=><option key={c}>{c}</option>)}</select></div>
                 <div className="form-group"><label className="form-label">Price (£) *</label><input className="form-input" type="number" min="1" placeholder="25" value={createForm.price} onChange={e=>setCreateForm(f=>({...f,price:e.target.value}))}/></div>
               </div>
               {createForm.price && !isNaN(createForm.price) && Number(createForm.price) > 0 && (() => {
@@ -1366,6 +1601,11 @@ export default function TutuTrade() {
               <div className="form-row">
                 <div className="form-group"><label className="form-label">Ad slot</label><select className="form-select" value={adForm.slot} onChange={e=>setAdForm(f=>({...f,slot:e.target.value}))}><option value="top">Top banner</option><option value="sidebar">Sidebar</option></select></div>
                 <div className="form-group"><label className="form-label">Status</label><select className="form-select" value={adForm.active?"true":"false"} onChange={e=>setAdForm(f=>({...f,active:e.target.value==="true"}))}><option value="true">Live</option><option value="false">Paused</option></select></div>
+              </div>
+              <div style={{padding:".65rem .85rem",background:hexToRgba(P.accent,0.07),border:`1px solid ${hexToRgba(P.accent,0.2)}`,borderRadius:7,fontSize:".75rem",color:P.muted,marginBottom:"1rem"}}>
+                💡 <strong style={{color:P.accent}}>Recommended graphic sizes:</strong><br/>
+                Top banner: <strong style={{color:P.text}}>728 × 90px</strong> &nbsp;·&nbsp; Sidebar: <strong style={{color:P.text}}>220 × 250px</strong><br/>
+                Supply PNG or JPG at 2× resolution for crisp display on retina screens.
               </div>
               <div className="form-group">
                 <label className="form-label">Logo / image</label>
