@@ -402,17 +402,20 @@ function PixieDust() {
 
 function AdBanner({ ad }) {
   if (!ad || !ad.active) return null;
+  const href = ad.url.startsWith("http") ? ad.url : `https://${ad.url}`;
+  if (ad.image) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" style={{display:"block",position:"relative",marginBottom:"1.75rem",borderRadius:10,overflow:"hidden",textDecoration:"none"}}>
+        <span style={{position:"absolute",top:".45rem",right:".6rem",fontSize:".58rem",textTransform:"uppercase",letterSpacing:".1em",color:"white",opacity:.7,background:"rgba(0,0,0,.4)",padding:".15rem .4rem",borderRadius:4}}>Ad</span>
+        <img src={ad.image} alt={ad.title} style={{width:"100%",height:90,objectFit:"cover",display:"block"}}/>
+      </a>
+    );
+  }
   return (
-    <a className="ad-banner" href={ad.url} target="_blank" rel="noopener noreferrer">
+    <a className="ad-banner" href={href} target="_blank" rel="noopener noreferrer">
       <span className="ad-banner-label">Ad</span>
-      {ad.image ? (
-        <img src={ad.image} alt={ad.title} className="ad-banner-full-img"/>
-      ) : (
-        <>
-          <div className="ad-banner-icon">💃</div>
-          <div className="ad-banner-text"><strong>{ad.title}</strong><span>{ad.tagline}</span></div>
-        </>
-      )}
+      <div className="ad-banner-icon">💃</div>
+      <div className="ad-banner-text"><strong>{ad.title}</strong><span>{ad.tagline}</span></div>
     </a>
   );
 }
@@ -422,14 +425,17 @@ function AdSidebar({ ads }) {
   if (!active.length) return null;
   return (
     <div className="sidebar">
-      {active.map(ad => (
-        <a key={ad.id} className="ad-sidebar-card" href={ad.url} target="_blank" rel="noopener noreferrer">
-          <div className="ad-sidebar-label">Sponsored</div>
-          <div className="ad-sidebar-icon">{ad.image ? <img src={ad.image} alt={ad.title}/> : "🩰"}</div>
-          <strong>{ad.title}</strong><br/><span>{ad.tagline}</span>
-          <div className="ad-sidebar-cta">Visit →</div>
-        </a>
-      ))}
+      {active.map(ad => {
+        const href = ad.url.startsWith("http") ? ad.url : `https://${ad.url}`;
+        return (
+          <a key={ad.id} className="ad-sidebar-card" href={href} target="_blank" rel="noopener noreferrer">
+            <div className="ad-sidebar-label">Sponsored</div>
+            <div className="ad-sidebar-icon">{ad.image ? <img src={ad.image} alt={ad.title}/> : "🩰"}</div>
+            <strong>{ad.title}</strong><br/><span>{ad.tagline}</span>
+            <div className="ad-sidebar-cta">Visit →</div>
+          </a>
+        );
+      })}
     </div>
   );
 }
