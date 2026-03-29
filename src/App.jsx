@@ -358,37 +358,56 @@ function PixieDust() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    const particles = Array.from({length: 60}, (_, i) => ({
-      x: Math.random() * 120,
-      y: Math.random() * -200 - i * 8,
-      vx: Math.random() * 1.5 - 0.3,
-      vy: Math.random() * 1.2 + 0.4,
-      size: Math.random() * 3 + 1,
-      opacity: Math.random(),
-      fade: Math.random() * 0.015 + 0.005,
-      hue: Math.random() * 30 + 35,
-    }));
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    resize();
+    // Origin near the logo in top-left
+    const originX = 48;
+    const originY = 36;
+    // Stop zone — particles fade before reaching ~40% down the page
+    const maxY = canvas.height * 0.42;
+
+    const makeParticle = () => ({
+      x: originX + (Math.random() * 30 - 10),
+      y: originY + (Math.random() * 20 - 10),
+      // arc outward: mostly rightward and slightly downward
+      vx: Math.random() * 3.5 + 0.8,
+      vy: Math.random() * 1.8 - 0.3,
+      ax: -0.015, // gentle deceleration
+      ay: 0.04,   // slight gravity
+      size: Math.random() * 2.8 + 0.8,
+      opacity: Math.random() * 0.7 + 0.3,
+      fade: Math.random() * 0.008 + 0.004,
+      hue: Math.random() * 25 + 38, // gold range
+      delay: Math.random() * 120,
+    });
+
+    const particles = Array.from({ length: 80 }, makeParticle);
+
     let raf;
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       particles.forEach(p => {
-        p.x += p.vx; p.y += p.vy; p.opacity -= p.fade;
-        if (p.opacity <= 0 || p.y > canvas.height) {
-          p.x = Math.random() * 120; p.y = -10;
-          p.vx = Math.random() * 1.5 - 0.3; p.vy = Math.random() * 1.2 + 0.4;
-          p.opacity = 1; p.size = Math.random() * 3 + 1;
+        if (p.delay > 0) { p.delay--; return; }
+        p.vx += p.ax; p.vy += p.ay;
+        p.x += p.vx; p.y += p.vy;
+        // Fade faster as particle approaches the stop zone
+        const proximity = Math.max(0, 1 - (maxY - p.y) / (maxY * 0.3));
+        const alpha = Math.max(0, p.opacity - proximity * 0.8);
+        p.opacity -= p.fade;
+        if (p.opacity <= 0 || p.x > canvas.width + 20 || p.y > maxY) {
+          Object.assign(p, makeParticle());
+          return;
         }
         ctx.save();
-        ctx.globalAlpha = Math.max(0, p.opacity);
-        ctx.fillStyle = `hsl(${p.hue}, 85%, 65%)`;
-        ctx.shadowBlur = 6; ctx.shadowColor = `hsl(${p.hue}, 100%, 75%)`;
+        ctx.globalAlpha = Math.max(0, alpha);
+        ctx.fillStyle = `hsl(${p.hue}, 90%, 68%)`;
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = `hsl(${p.hue}, 100%, 78%)`;
+        // Draw small star
         ctx.beginPath();
-        // Draw star shape
-        for (let j = 0; j < 5; j++) {
-          const angle = (j * 4 * Math.PI) / 5 - Math.PI / 2;
-          const r = j % 2 === 0 ? p.size : p.size * 0.4;
+        for (let j = 0; j < 10; j++) {
+          const angle = (j * Math.PI) / 5 - Math.PI / 2;
+          const r = j % 2 === 0 ? p.size : p.size * 0.45;
           j === 0 ? ctx.moveTo(p.x + r * Math.cos(angle), p.y + r * Math.sin(angle))
                   : ctx.lineTo(p.x + r * Math.cos(angle), p.y + r * Math.sin(angle));
         }
@@ -397,7 +416,6 @@ function PixieDust() {
       raf = requestAnimationFrame(draw);
     };
     draw();
-    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
     window.addEventListener("resize", resize);
     return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
   }, []);
@@ -427,9 +445,9 @@ function AdBanner({ ad }) {
 function AdSidebarSlot({ ads, slot, schoolId }) {
   const active = ads.filter(a => {
     if (!a.active || a.slot !== slot) return false;
-    if (a.scope === "global") return !schoolId; // global ads only on main browse
+    if (a.scope === "global") return true; // global ads show in sidebar always
     if (a.scope === "school") return a.school_id === schoolId;
-    if (a.scope === "both") return true;
+    if (a.scope === "both") return !schoolId || a.school_id === schoolId;
     return false;
   });
   if (!active.length) return null;
@@ -499,6 +517,7 @@ export default function TutuTrade() {
   const [editForm, setEditForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[] });
   const [editError, setEditError] = useState("");
   const [adminTab, setAdminTab] = useState("overview");
+  const [newDropdownItem, setNewDropdownItem] = useState({ danceStyle:"", size:"", condition:"" });
   const [eventForm, setEventForm] = useState({ title:"", event_date:"", description:"", school_id:"" });
   const [editingEvent, setEditingEvent] = useState(null);
   const [, setTick] = useState(0);
@@ -561,6 +580,19 @@ export default function TutuTrade() {
   const loadBoardReplies = async () => { const { data } = await supabase.from("board_replies").select("*").order("created_at"); if (data) setBoardReplies(data); };
   const loadCommission = async () => { const { data } = await supabase.from("settings").select("value").eq("key","commission_pct").single(); if (data) setCommissionPct(parseFloat(data.value)); };
   const loadEvents = async () => { const { data } = await supabase.from("events").select("*").order("event_date"); if (data) setEvents(data); };
+
+  const addDropdownItem = async (table, name, setter) => {
+    if (!name.trim()) return;
+    const { data: existing } = await supabase.from(table).select("sort_order").order("sort_order", { ascending: false }).limit(1);
+    const nextOrder = existing?.length ? (existing[0].sort_order || 0) + 1 : 1;
+    await supabase.from(table).insert([{ name: name.trim(), sort_order: nextOrder }]);
+    await loadDropdowns();
+  };
+
+  const removeDropdownItem = async (table, name) => {
+    await supabase.from(table).delete().eq("name", name);
+    await loadDropdowns();
+  };
   const loadDropdowns = async () => {
     const [ds, sz, cn] = await Promise.all([
       supabase.from("dance_styles").select("*").order("sort_order"),
@@ -1014,7 +1046,7 @@ export default function TutuTrade() {
               <div className="admin-stat"><div className="admin-stat-value">£{totalRevenue.toFixed(2)}</div><div className="admin-stat-label">Est. Revenue</div></div>
             </div>
             <div className="admin-tabs">
-              {["overview","schools","events","users","ads","listings"].map(t => (
+              {["overview","schools","events","users","ads","listings","dropdowns"].map(t => (
                 <button key={t} className={`admin-tab ${adminTab===t?"active":""}`} onClick={() => setAdminTab(t)}>
                   {t.charAt(0).toUpperCase()+t.slice(1)}
                 </button>
@@ -1335,6 +1367,61 @@ export default function TutuTrade() {
                     {!listings.length && <tr><td colSpan={7} style={{color:P.muted,textAlign:"center",padding:"1.5rem"}}>No listings</td></tr>}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {adminTab === "dropdowns" && (
+              <div className="admin-section">
+                <div className="admin-section-title">🎛 Manage Dropdowns</div>
+                <p style={{fontSize:".82rem",color:P.muted,marginBottom:"1.5rem"}}>Add or remove options from the dance style, size and condition dropdowns.</p>
+
+                <div style={{marginBottom:"1.5rem",padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10}}>
+                  <div style={{fontSize:".82rem",fontWeight:500,color:P.text,marginBottom:"1rem"}}>💃 Dance Styles</div>
+                  <div style={{display:"flex",gap:".5rem",flexWrap:"wrap",marginBottom:"1rem"}}>
+                    {danceStyles.map(s => (
+                      <div key={s} style={{display:"flex",alignItems:"center",gap:".3rem",padding:".25rem .65rem",background:hexToRgba(P.accent,0.1),border:`1px solid ${hexToRgba(P.accent,0.25)}`,borderRadius:20}}>
+                        <span style={{fontSize:".78rem",color:P.accent}}>{s}</span>
+                        <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".85rem",lineHeight:1,padding:"0 .1rem"}} onClick={() => removeDropdownItem("dance_styles", s)}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{display:"flex",gap:".5rem"}}>
+                    <input className="form-input" placeholder="Add new dance style..." value={newDropdownItem.danceStyle} onChange={e=>setNewDropdownItem(f=>({...f,danceStyle:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter"){addDropdownItem("dance_styles",newDropdownItem.danceStyle);setNewDropdownItem(f=>({...f,danceStyle:""}));}}} style={{flex:1}}/>
+                    <button className="btn btn-primary btn-sm" onClick={()=>{addDropdownItem("dance_styles",newDropdownItem.danceStyle);setNewDropdownItem(f=>({...f,danceStyle:""}));}}>+ Add</button>
+                  </div>
+                </div>
+
+                <div style={{marginBottom:"1.5rem",padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10}}>
+                  <div style={{fontSize:".82rem",fontWeight:500,color:P.text,marginBottom:"1rem"}}>📏 Sizes</div>
+                  <div style={{display:"flex",gap:".5rem",flexWrap:"wrap",marginBottom:"1rem"}}>
+                    {sizes.map(s => (
+                      <div key={s} style={{display:"flex",alignItems:"center",gap:".3rem",padding:".25rem .65rem",background:hexToRgba(P.pink,0.1),border:`1px solid ${hexToRgba(P.pink,0.25)}`,borderRadius:20}}>
+                        <span style={{fontSize:".78rem",color:P.pink}}>{s}</span>
+                        <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".85rem",lineHeight:1,padding:"0 .1rem"}} onClick={() => removeDropdownItem("sizes", s)}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{display:"flex",gap:".5rem"}}>
+                    <input className="form-input" placeholder="Add new size..." value={newDropdownItem.size} onChange={e=>setNewDropdownItem(f=>({...f,size:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter"){addDropdownItem("sizes",newDropdownItem.size);setNewDropdownItem(f=>({...f,size:""}));}}} style={{flex:1}}/>
+                    <button className="btn btn-primary btn-sm" onClick={()=>{addDropdownItem("sizes",newDropdownItem.size);setNewDropdownItem(f=>({...f,size:""}));}}>+ Add</button>
+                  </div>
+                </div>
+
+                <div style={{padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10}}>
+                  <div style={{fontSize:".82rem",fontWeight:500,color:P.text,marginBottom:"1rem"}}>✨ Conditions</div>
+                  <div style={{display:"flex",gap:".5rem",flexWrap:"wrap",marginBottom:"1rem"}}>
+                    {conditions.map(c => (
+                      <div key={c} style={{display:"flex",alignItems:"center",gap:".3rem",padding:".25rem .65rem",background:hexToRgba(P.success,0.1),border:`1px solid ${hexToRgba(P.success,0.25)}`,borderRadius:20}}>
+                        <span style={{fontSize:".78rem",color:P.success}}>{c}</span>
+                        <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".85rem",lineHeight:1,padding:"0 .1rem"}} onClick={() => removeDropdownItem("conditions", c)}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{display:"flex",gap:".5rem"}}>
+                    <input className="form-input" placeholder="Add new condition..." value={newDropdownItem.condition} onChange={e=>setNewDropdownItem(f=>({...f,condition:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter"){addDropdownItem("conditions",newDropdownItem.condition);setNewDropdownItem(f=>({...f,condition:""}));}}} style={{flex:1}}/>
+                    <button className="btn btn-primary btn-sm" onClick={()=>{addDropdownItem("conditions",newDropdownItem.condition);setNewDropdownItem(f=>({...f,condition:""}));}}>+ Add</button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
