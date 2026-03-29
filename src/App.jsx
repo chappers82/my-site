@@ -958,14 +958,13 @@ export default function TutuTrade() {
     return true;
   });
 
-  // Find top banner ad — school-specific takes priority over global when filtering by school
+  const activeSchoolFilter = filters.school ? getSchool(filters.school) : null;
   const activeSchoolId = activeSchoolFilter?.id || null;
   const topAd = ads.find(a => a.active && a.slot === "top" && a.scope === "school" && a.school_id === activeSchoolId)
     || ads.find(a => a.active && a.slot === "top" && (a.scope === "both"))
     || ads.find(a => a.active && a.slot === "top" && a.scope === "global" && !activeSchoolId)
     || ads.find(a => a.active && a.slot === "top");
   const totalRevenue = listings.reduce((s, l) => s + calcFees(l.price, getCommission(l.school_id)).commission, 0);
-  const activeSchoolFilter = filters.school ? getSchool(filters.school) : null;
 
   if (loading) return <div className="app"><style>{getCSS()}</style><div className="loading" style={{paddingTop:"5rem"}}>Loading TutuTrade...</div></div>;
 
