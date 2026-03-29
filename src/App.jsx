@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
+import React from "react";
 import { supabase } from "./supabase.js";
 
 // ─── EMAIL ────────────────────────────────────────────────────────────────
