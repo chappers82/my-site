@@ -301,6 +301,29 @@ const css = `
   ::-webkit-scrollbar-track{background:${P.bg}}
   ::-webkit-scrollbar-thumb{background:${P.border};border-radius:3px}
 
+  /* COMMENTS */
+  .comments-section{margin-top:1.1rem;padding-top:1.1rem;border-top:1px solid ${P.border}}
+  .comments-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:${P.muted};margin-bottom:.75rem}
+  .comment-item{padding:.65rem .85rem;background:${P.card};border-radius:8px;margin-bottom:.5rem;font-size:.82rem}
+  .comment-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.25rem}
+  .comment-author{font-weight:500;color:${P.accent};font-size:.75rem}
+  .comment-time{font-size:.68rem;color:${P.muted}}
+  .comment-text{color:${P.text};line-height:1.5}
+  .comment-input-row{display:flex;gap:.5rem;margin-top:.75rem}
+
+  /* BOARD */
+  .board-filters{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.25rem}
+  .board-post{background:${P.card};border:1px solid ${P.border};border-radius:10px;margin-bottom:.85rem;overflow:hidden}
+  .board-post-header{padding:.85rem 1rem;cursor:pointer;transition:background .2s}
+  .board-post-header:hover{background:${P.surface}}
+  .board-post-title{font-family:'Playfair Display',serif;font-size:.95rem;color:${P.text};margin-bottom:.25rem}
+  .board-post-meta{font-size:.72rem;color:${P.muted};display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}
+  .board-post-body{padding:.85rem 1rem;border-top:1px solid ${P.border};font-size:.84rem;color:${P.muted};line-height:1.6}
+  .board-replies{padding:.75rem 1rem;background:${P.bg};border-top:1px solid ${P.border}}
+  .board-reply{padding:.6rem .75rem;background:${P.surface};border-radius:7px;margin-bottom:.4rem;font-size:.8rem}
+  .board-reply-author{font-weight:500;color:${P.pink};font-size:.72rem;margin-bottom:.2rem}
+  .new-post-form{padding:1rem;background:${P.surface};border:1px solid ${P.border};border-radius:10px;margin-bottom:1.25rem}
+
   /* PIXIE DUST */
   .pixie-canvas{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;}
 
@@ -420,6 +443,16 @@ export default function TutuTrade() {
   const [allUsers, setAllUsers] = useState([]);
   const [commissionPct, setCommissionPct] = useState(1.5);
   const [view, setView] = useState("browse");
+  const [boardSchoolId, setBoardSchoolId] = useState("general");
+  const [comments, setComments] = useState([]);
+  const [boardPosts, setBoardPosts] = useState([]);
+  const [boardReplies, setBoardReplies] = useState([]);
+  const [commentText, setCommentText] = useState("");
+  const [newPost, setNewPost] = useState({ title:"", message:"" });
+  const [replyText, setReplyText] = useState({});
+  const [expandedPost, setExpandedPost] = useState(null);
+  const [editForm, setEditForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[] });
+  const [editError, setEditError] = useState("");
   const [adminTab, setAdminTab] = useState("overview");
   const [eventForm, setEventForm] = useState({ title:"", event_date:"", description:"", school_id:"" });
   const [editingEvent, setEditingEvent] = useState(null);
@@ -468,7 +501,7 @@ export default function TutuTrade() {
       if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); }
       else { setUserSchools([]); setIsAdmin(false); }
     });
-    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns();
+    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies();
     const ticker = setInterval(() => setTick(t => t + 1), 1000);
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
   }, []);
@@ -478,6 +511,9 @@ export default function TutuTrade() {
   const loadListings = async () => { const { data } = await supabase.from("listings").select("*").order("created_at",{ascending:false}); if (data) setListings(data); };
   const loadAds = async () => { const { data } = await supabase.from("ads").select("*").order("created_at",{ascending:false}); if (data) setAds(data); };
   const loadSchools = async () => { const { data } = await supabase.from("schools").select("*").order("name"); if (data) setSchools(data); };
+  const loadComments = async (listingId) => { const { data } = await supabase.from("listing_comments").select("*").eq("listing_id", listingId).order("created_at"); if (data) setComments(data); };
+  const loadBoardPosts = async () => { const { data } = await supabase.from("board_posts").select("*").order("created_at",{ascending:false}); if (data) setBoardPosts(data); };
+  const loadBoardReplies = async () => { const { data } = await supabase.from("board_replies").select("*").order("created_at"); if (data) setBoardReplies(data); };
   const loadCommission = async () => { const { data } = await supabase.from("settings").select("value").eq("key","commission_pct").single(); if (data) setCommissionPct(parseFloat(data.value)); };
   const loadEvents = async () => { const { data } = await supabase.from("events").select("*").order("event_date"); if (data) setEvents(data); };
   const loadDropdowns = async () => {
@@ -714,11 +750,115 @@ export default function TutuTrade() {
 
   const handleAdminDeleteUser = async () => {
     if (!confirmDelete) return;
+    // Remove all user data (we can't delete auth users from frontend without service role)
     await supabase.from("user_schools").delete().eq("user_email", confirmDelete.email);
     await supabase.from("listings").delete().eq("seller_email", confirmDelete.email);
-    setSuccess(`${confirmDelete.full_name || confirmDelete.email} removed.`);
+    await supabase.from("listing_comments").delete().eq("user_email", confirmDelete.email);
+    await supabase.from("board_posts").delete().eq("user_email", confirmDelete.email);
+    await supabase.from("board_replies").delete().eq("user_email", confirmDelete.email);
+    // Ban the user so they can't log in (requires service role - show instructions instead)
+    setSuccess(`${confirmDelete.full_name || confirmDelete.email} — all data removed. To fully delete their login, go to Supabase → Authentication → Users and delete them there.`);
     await loadAllUsers(); await loadAllUserSchools(); await loadListings();
     setConfirmDelete(null); setSelectedUser(null); setModal(null);
+  };
+
+  // ── EDIT LISTING ──
+  const openEditListing = (listing) => {
+    setEditForm({
+      title: listing.title, style: listing.style, size: listing.size,
+      itemType: listing.item_type || "Clothing",
+      condition: listing.condition, price: listing.price,
+      description: listing.description || "",
+      image: listing.image || null,
+      images: listing.images || [],
+    });
+    setEditError("");
+    setModal("editListing");
+  };
+
+  const handleUpdateListing = async () => {
+    setEditError("");
+    const { title, style, size, condition, price } = editForm;
+    if (!title || !style || !condition || !price) return setEditError("Please fill in all required fields.");
+    if (isNaN(price) || Number(price) <= 0) return setEditError("Please enter a valid price.");
+    const { error } = await supabase.from("listings").update({
+      title, style, size, condition,
+      price: Number(price),
+      description: editForm.description,
+      image: editForm.images?.[0] || editForm.image || null,
+      images: editForm.images || [],
+    }).eq("id", selectedListing.id);
+    if (error) return setEditError("Failed to update. Please try again.");
+    await loadListings(); closeModal(); setSuccess("Listing updated!");
+  };
+
+  const handleEditMultiImageUpload = (e) => {
+    const files = Array.from(e.target.files).slice(0, 5 - (editForm.images?.length || 0));
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = ev => setEditForm(f => ({ ...f, images: [...(f.images||[]), ev.target.result].slice(0,5) }));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeEditImage = (index) => {
+    setEditForm(f => ({ ...f, images: f.images.filter((_,i) => i !== index) }));
+  };
+
+  // ── COMMENTS ──
+  const handlePostComment = async () => {
+    if (!commentText.trim() || !selectedListing) return;
+    await supabase.from("listing_comments").insert([{
+      listing_id: selectedListing.id,
+      user_email: user.email,
+      user_name: user.user_metadata?.full_name || user.email,
+      message: commentText.trim(),
+    }]);
+    await loadComments(selectedListing.id);
+    setCommentText("");
+  };
+
+  const handleDeleteComment = async (id) => {
+    await supabase.from("listing_comments").delete().eq("id", id);
+    if (selectedListing) await loadComments(selectedListing.id);
+  };
+
+  // ── BOARD ──
+  const handlePostBoard = async () => {
+    if (!newPost.title.trim() || !newPost.message.trim()) return;
+    const schoolId = boardSchoolId === "general" ? null : boardSchoolId;
+    await supabase.from("board_posts").insert([{
+      school_id: schoolId,
+      user_email: user.email,
+      user_name: user.user_metadata?.full_name || user.email,
+      title: newPost.title.trim(),
+      message: newPost.message.trim(),
+    }]);
+    await loadBoardPosts();
+    setNewPost({ title:"", message:"" });
+  };
+
+  const handlePostReply = async (postId) => {
+    const text = replyText[postId];
+    if (!text?.trim()) return;
+    await supabase.from("board_replies").insert([{
+      post_id: postId,
+      user_email: user.email,
+      user_name: user.user_metadata?.full_name || user.email,
+      message: text.trim(),
+    }]);
+    await loadBoardReplies();
+    setReplyText(t => ({ ...t, [postId]:"" }));
+  };
+
+  const handleDeletePost = async (id) => {
+    await supabase.from("board_posts").delete().eq("id", id);
+    await loadBoardPosts();
+  };
+
+  const handleDeleteReply = async (id) => {
+    await supabase.from("board_replies").delete().eq("id", id);
+    await loadBoardReplies();
   };
 
   const handleAdminResetPassword = async (email) => {
@@ -1284,6 +1424,7 @@ export default function TutuTrade() {
               <div className="nav-pills">
                 <button className={`nav-pill ${view==="browse"?"active":""}`} onClick={() => setView("browse")}>Browse all</button>
                 <button className={`nav-pill ${view==="mylistings"?"active":""}`} onClick={() => setView("mylistings")}>My listings</button>
+                <button className={`nav-pill ${view==="board"?"active":""}`} onClick={() => { setView("board"); loadBoardPosts(); loadBoardReplies(); }}>💬 Board</button>
               </div>
             )}
 
@@ -1370,7 +1511,7 @@ export default function TutuTrade() {
                   ) : filtered.map(l => {
                     const sc = getSchoolColor(l.school_id);
                     return (
-                      <div className="card" key={l.id} style={{borderColor:hexToRgba(sc,0.25),opacity:l.sold?0.7:1}} onClick={() => { setSelectedListing(l); setModal("detail"); }}>
+                      <div className="card" key={l.id} style={{borderColor:hexToRgba(sc,0.25),opacity:l.sold?0.7:1}} onClick={() => { setSelectedListing(l); setModal("detail"); loadComments(l.id); setCommentText(""); }}>
                         <div className="school-stripe" style={{background:sc}}/>
                         <div className="card-image-wrap">
                           <div className="card-image" onClick={e=>{if(l.image){e.stopPropagation();setLightboxImage(l.image);}}}>
@@ -1405,6 +1546,86 @@ export default function TutuTrade() {
               </div>
               {view === "browse" && <AdSidebar ads={ads} />}
             </div>
+
+            {/* ── BOARD VIEW ── */}
+            {view === "board" && (
+              <div style={{maxWidth:720}}>
+                <div style={{marginBottom:"1.5rem"}}>
+                  <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"1.5rem",color:P.accentSoft,marginBottom:".3rem"}}>💬 Community Board</h2>
+                  <p style={{fontSize:".82rem",color:P.muted}}>Ask questions, find items, share tips with your dance community.</p>
+                </div>
+
+                {/* Board filter */}
+                <div className="board-filters">
+                  <button className={`nav-pill ${boardSchoolId==="general"?"active":""}`} onClick={() => setBoardSchoolId("general")}>🌐 General</button>
+                  {userSchools.map(us => {
+                    const sc = getSchoolColor(us.school_id);
+                    return (
+                      <button key={us.school_id} className={`nav-pill ${boardSchoolId===us.school_id?"active":""}`}
+                        style={boardSchoolId===us.school_id?{background:hexToRgba(sc,0.12),borderColor:sc,color:sc}:{}}
+                        onClick={() => setBoardSchoolId(us.school_id)}>
+                        🏫 {us.school_name}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* New post form */}
+                <div className="new-post-form">
+                  <div style={{fontSize:".78rem",fontWeight:500,color:P.text,marginBottom:".75rem"}}>Start a new thread</div>
+                  <div className="form-group"><input className="form-input" placeholder="Title — e.g. Anyone selling ballet shoes size UK 3?" value={newPost.title} onChange={e=>setNewPost(f=>({...f,title:e.target.value}))}/></div>
+                  <div className="form-group" style={{marginBottom:".5rem"}}><textarea className="form-textarea" style={{minHeight:60}} placeholder="Add more detail..." value={newPost.message} onChange={e=>setNewPost(f=>({...f,message:e.target.value}))}/></div>
+                  <button className="btn btn-primary btn-sm" onClick={handlePostBoard}>Post</button>
+                </div>
+
+                {/* Posts */}
+                {boardPosts.filter(p => boardSchoolId === "general" ? !p.school_id : p.school_id === boardSchoolId).length === 0 && (
+                  <div className="empty-state" style={{gridColumn:"auto"}}><div className="empty-state-icon">💬</div><h3>No posts yet</h3><p style={{marginTop:".5rem",fontSize:".83rem"}}>Be the first to post!</p></div>
+                )}
+                {boardPosts.filter(p => boardSchoolId === "general" ? !p.school_id : p.school_id === boardSchoolId).map(post => {
+                  const replies = boardReplies.filter(r => r.post_id === post.id);
+                  const isOpen = expandedPost === post.id;
+                  const sc = post.school_id ? getSchoolColor(post.school_id) : P.accent;
+                  return (
+                    <div key={post.id} className="board-post" style={{borderLeft:`3px solid ${sc}`}}>
+                      <div className="board-post-header" onClick={() => setExpandedPost(isOpen ? null : post.id)}>
+                        <div className="board-post-title">{post.title}</div>
+                        <div className="board-post-meta">
+                          <span style={{color:sc}}>{post.user_name}</span>
+                          <span>{new Date(post.created_at).toLocaleDateString("en-GB")}</span>
+                          <span>{replies.length} {replies.length===1?"reply":"replies"}</span>
+                          {(user?.email === post.user_email || isAdmin) && <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".75rem",fontFamily:"'Jost',sans-serif"}} onClick={e=>{e.stopPropagation();handleDeletePost(post.id);}}>Remove</button>}
+                          <span style={{color:P.muted}}>{isOpen?"▲":"▼"}</span>
+                        </div>
+                      </div>
+                      {isOpen && (
+                        <>
+                          <div className="board-post-body">{post.message}</div>
+                          <div className="board-replies">
+                            {replies.map(r => (
+                              <div key={r.id} className="board-reply">
+                                <div className="board-reply-author" style={{display:"flex",justifyContent:"space-between"}}>
+                                  <span>{r.user_name}</span>
+                                  <span style={{color:P.muted,fontWeight:400}}>{new Date(r.created_at).toLocaleDateString("en-GB")}</span>
+                                </div>
+                                <div style={{color:P.text}}>{r.message}</div>
+                                {(user?.email === r.user_email || isAdmin) && <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif",marginTop:".25rem"}} onClick={() => handleDeleteReply(r.id)}>Remove</button>}
+                              </div>
+                            ))}
+                            {user && (
+                              <div className="comment-input-row" style={{marginTop:replies.length?".75rem":0}}>
+                                <input className="form-input" placeholder="Write a reply..." value={replyText[post.id]||""} onChange={e=>setReplyText(t=>({...t,[post.id]:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&handlePostReply(post.id)} style={{flex:1}}/>
+                                <button className="btn btn-primary btn-sm" onClick={() => handlePostReply(post.id)}>Reply</button>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1577,6 +1798,7 @@ export default function TutuTrade() {
                       ? <button className="btn btn-success" style={{width:"100%",padding:".72rem"}} onClick={()=>handleMarkSold(selectedListing.id)}>✓ Mark as sold</button>
                       : <button className="btn btn-ghost" style={{width:"100%",padding:".72rem"}} onClick={()=>handleMarkUnsold(selectedListing.id)}>↩ Relist item</button>
                     }
+                    <button className="btn btn-outline" style={{width:"100%"}} onClick={()=>openEditListing(selectedListing)}>✏ Edit listing</button>
                     <button className="btn btn-danger" style={{width:"100%"}} onClick={()=>handleDelete(selectedListing.id)}>Remove listing</button>
                   </div>
                 ) : (
@@ -1588,11 +1810,102 @@ export default function TutuTrade() {
                   </a>
                 )}
                 {!user && <p style={{textAlign:"center",fontSize:".76rem",color:P.muted,marginTop:".7rem"}}><button className="text-link" onClick={()=>{setModal("auth");setAuthTab("login");}}>Sign in</button> to purchase</p>}
+
+                {/* COMMENTS */}
+                {user && (
+                  <div className="comments-section">
+                    <div className="comments-title">💬 Questions & Comments ({comments.length})</div>
+                    {comments.map(c => (
+                      <div key={c.id} className="comment-item">
+                        <div className="comment-header">
+                          <span className="comment-author">{c.user_name}</span>
+                          <div style={{display:"flex",alignItems:"center",gap:".5rem"}}>
+                            <span className="comment-time">{new Date(c.created_at).toLocaleDateString("en-GB")}</span>
+                            {(user.email === c.user_email || isAdmin) && <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".75rem"}} onClick={()=>handleDeleteComment(c.id)}>×</button>}
+                          </div>
+                        </div>
+                        <div className="comment-text">{c.message}</div>
+                      </div>
+                    ))}
+                    {comments.length === 0 && <p style={{fontSize:".78rem",color:P.muted,marginBottom:".5rem"}}>No comments yet — be the first to ask!</p>}
+                    <div className="comment-input-row">
+                      <input className="form-input" placeholder="Ask a question..." value={commentText} onChange={e=>setCommentText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handlePostComment()} style={{flex:1}}/>
+                      <button className="btn btn-primary btn-sm" onClick={handlePostComment}>Post</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         );
       })()}
+
+      {/* EDIT LISTING MODAL */}
+      {modal === "editListing" && selectedListing && (
+        <div className="overlay" onClick={closeModal}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-header"><div className="modal-title">Edit listing</div><button className="modal-close" onClick={closeModal}>×</button></div>
+            <div className="modal-body">
+              {editError && <div className="form-error" style={{marginBottom:"1rem"}}>⚠ {editError}</div>}
+              <div className="form-group"><label className="form-label">Item title *</label><input className="form-input" value={editForm.title} onChange={e=>setEditForm(f=>({...f,title:e.target.value}))}/></div>
+              <div className="form-row">
+                <div className="form-group"><label className="form-label">Dance style *</label><select className="form-select" value={editForm.style} onChange={e=>setEditForm(f=>({...f,style:e.target.value}))}><option value="">Select...</option>{danceStyles.map(s=><option key={s}>{s}</option>)}</select></div>
+                <div className="form-group">
+                  <label className="form-label">Item type</label>
+                  <select className="form-select" value={editForm.itemType} onChange={e=>setEditForm(f=>({...f,itemType:e.target.value,size:""}))}>
+                    {ITEM_TYPES.map(t=><option key={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">{editForm.itemType==="Footwear"?"Shoe size":"Clothing size"}</label>
+                {editForm.itemType==="Accessories / Other" ? (
+                  <input className="form-input" value="N/A" disabled/>
+                ) : editForm.itemType==="Footwear" ? (
+                  <select className="form-select" value={editForm.size} onChange={e=>setEditForm(f=>({...f,size:e.target.value}))}><option value="">Select...</option>{SHOE_SIZES.map(s=><option key={s}>{s}</option>)}</select>
+                ) : (
+                  <select className="form-select" value={editForm.size} onChange={e=>setEditForm(f=>({...f,size:e.target.value}))}><option value="">Select...</option>{sizes.map(s=><option key={s}>{s}</option>)}</select>
+                )}
+              </div>
+              <div className="form-row">
+                <div className="form-group"><label className="form-label">Condition *</label><select className="form-select" value={editForm.condition} onChange={e=>setEditForm(f=>({...f,condition:e.target.value}))}><option value="">Select...</option>{conditions.map(c=><option key={c}>{c}</option>)}</select></div>
+                <div className="form-group"><label className="form-label">Price (£) *</label><input className="form-input" type="number" min="1" value={editForm.price} onChange={e=>setEditForm(f=>({...f,price:e.target.value}))}/></div>
+              </div>
+              {editForm.price && !isNaN(editForm.price) && Number(editForm.price) > 0 && (() => {
+                const eff = getCommission(selectedListing.school_id);
+                return (
+                  <div className="commission-box">
+                    <div className="commission-row"><span className="commission-label">Listing price</span><span className="commission-value">£{Number(editForm.price).toFixed(2)}</span></div>
+                    <div className="commission-row"><span className="commission-label">Platform fee ({eff}%)</span><span className="commission-value">−£{calcFees(Number(editForm.price),eff).commission}</span></div>
+                    <div className="commission-row total"><span>You receive</span><span>£{calcFees(Number(editForm.price),eff).sellerReceives}</span></div>
+                  </div>
+                );
+              })()}
+              <div className="form-group"><label className="form-label">Description</label><textarea className="form-textarea" value={editForm.description} onChange={e=>setEditForm(f=>({...f,description:e.target.value}))}/></div>
+              <div className="form-group">
+                <label className="form-label">Photos ({(editForm.images||[]).length}/5)</label>
+                {editForm.images && editForm.images.length > 0 && (
+                  <div className="multi-upload-grid" style={{marginBottom:".5rem"}}>
+                    {editForm.images.map((img,i) => (
+                      <div key={i} className="multi-upload-thumb">
+                        <img src={img} alt={`photo ${i+1}`}/>
+                        <button className="multi-upload-remove" onClick={()=>removeEditImage(i)}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(editForm.images||[]).length < 5 && (
+                  <label className="upload-area">
+                    <input type="file" accept="image/*" multiple onChange={handleEditMultiImageUpload}/>
+                    <div>📷 Add more photos</div>
+                  </label>
+                )}
+              </div>
+              <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={handleUpdateListing}>Save changes</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* LIGHTBOX */}
       {lightboxImage && (
