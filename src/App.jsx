@@ -310,6 +310,10 @@ function getCSS() { return `
   .comments-section{margin-top:1.1rem;padding-top:1.1rem;border-top:1px solid ${P.border}}
   .comments-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:${P.muted};margin-bottom:.75rem}
   .comment-item{padding:.65rem .85rem;background:${P.card};border-radius:8px;margin-bottom:.5rem;font-size:.82rem}
+  .comment-reply-item{padding:.5rem .75rem;background:${P.surface};border-radius:6px;margin-top:.4rem;margin-left:1rem;font-size:.78rem;border-left:2px solid ${P.accent}}
+  .comment-reply-author{font-weight:500;color:${P.accentSoft};font-size:.72rem;margin-bottom:.15rem}
+  .comment-reply-btn{background:none;border:none;color:${P.muted};cursor:pointer;font-size:.72rem;font-family:'Jost',sans-serif;padding:.15rem 0;transition:color .2s}
+  .comment-reply-btn:hover{color:${P.accent}}
   .comment-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.25rem}
   .comment-author{font-weight:500;color:${P.accent};font-size:.75rem}
   .comment-time{font-size:.68rem;color:${P.muted}}
@@ -511,6 +515,8 @@ export default function TutuTrade() {
   const [boardPosts, setBoardPosts] = useState([]);
   const [boardReplies, setBoardReplies] = useState([]);
   const [commentText, setCommentText] = useState("");
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [commentReplyText, setCommentReplyText] = useState("");
   const [newPost, setNewPost] = useState({ title:"", message:"" });
   const [replyText, setReplyText] = useState({});
   const [expandedPost, setExpandedPost] = useState(null);
@@ -904,6 +910,20 @@ export default function TutuTrade() {
   const handleDeleteComment = async (id) => {
     await supabase.from("listing_comments").delete().eq("id", id);
     if (selectedListing) await loadComments(selectedListing.id);
+  };
+
+  const handlePostCommentReply = async (parentId) => {
+    if (!commentReplyText.trim() || !selectedListing) return;
+    await supabase.from("listing_comments").insert([{
+      listing_id: selectedListing.id,
+      user_email: user.email,
+      user_name: user.user_metadata?.full_name || user.email,
+      message: commentReplyText.trim(),
+      parent_id: parentId,
+    }]);
+    await loadComments(selectedListing.id);
+    setCommentReplyText("");
+    setReplyingTo(null);
   };
 
   // ── BOARD ──
@@ -1974,20 +1994,46 @@ export default function TutuTrade() {
                 {/* COMMENTS */}
                 {user && (
                   <div className="comments-section">
-                    <div className="comments-title">💬 Questions & Comments ({comments.length})</div>
-                    {comments.map(c => (
-                      <div key={c.id} className="comment-item">
-                        <div className="comment-header">
-                          <span className="comment-author">{c.user_name}</span>
-                          <div style={{display:"flex",alignItems:"center",gap:".5rem"}}>
-                            <span className="comment-time">{new Date(c.created_at).toLocaleDateString("en-GB")}</span>
-                            {(user.email === c.user_email || isAdmin) && <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".75rem"}} onClick={()=>handleDeleteComment(c.id)}>×</button>}
+                    <div className="comments-title">💬 Questions & Comments ({comments.filter(c=>!c.parent_id).length})</div>
+                    {comments.filter(c => !c.parent_id).map(c => {
+                      const replies = comments.filter(r => r.parent_id === c.id);
+                      return (
+                        <div key={c.id} className="comment-item">
+                          <div className="comment-header">
+                            <span className="comment-author">{c.user_name}</span>
+                            <div style={{display:"flex",alignItems:"center",gap:".5rem"}}>
+                              <span className="comment-time">{new Date(c.created_at).toLocaleDateString("en-GB")}</span>
+                              {(user.email === c.user_email || isAdmin) && <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".75rem"}} onClick={()=>handleDeleteComment(c.id)}>×</button>}
+                            </div>
                           </div>
+                          <div className="comment-text">{c.message}</div>
+                          {/* Replies */}
+                          {replies.map(r => (
+                            <div key={r.id} className="comment-reply-item">
+                              <div className="comment-reply-author" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                                <span>↩ {r.user_name}</span>
+                                <div style={{display:"flex",gap:".4rem",alignItems:"center"}}>
+                                  <span style={{fontSize:".68rem",color:P.muted}}>{new Date(r.created_at).toLocaleDateString("en-GB")}</span>
+                                  {(user.email === r.user_email || isAdmin) && <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".75rem"}} onClick={()=>handleDeleteComment(r.id)}>×</button>}
+                                </div>
+                              </div>
+                              <div style={{color:P.text}}>{r.message}</div>
+                            </div>
+                          ))}
+                          {/* Reply input */}
+                          {replyingTo === c.id ? (
+                            <div className="comment-input-row" style={{marginTop:".5rem"}}>
+                              <input className="form-input" placeholder="Write a reply..." value={commentReplyText} onChange={e=>setCommentReplyText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handlePostCommentReply(c.id)} style={{flex:1}} autoFocus/>
+                              <button className="btn btn-primary btn-sm" onClick={()=>handlePostCommentReply(c.id)}>Reply</button>
+                              <button className="btn btn-ghost btn-sm" onClick={()=>{setReplyingTo(null);setCommentReplyText("");}}>Cancel</button>
+                            </div>
+                          ) : (
+                            <button className="comment-reply-btn" onClick={()=>{setReplyingTo(c.id);setCommentReplyText("");}}>↩ Reply</button>
+                          )}
                         </div>
-                        <div className="comment-text">{c.message}</div>
-                      </div>
-                    ))}
-                    {comments.length === 0 && <p style={{fontSize:".78rem",color:P.muted,marginBottom:".5rem"}}>No comments yet — be the first to ask!</p>}
+                      );
+                    })}
+                    {comments.filter(c=>!c.parent_id).length === 0 && <p style={{fontSize:".78rem",color:P.muted,marginBottom:".5rem"}}>No comments yet — be the first to ask!</p>}
                     <div className="comment-input-row">
                       <input className="form-input" placeholder="Ask a question..." value={commentText} onChange={e=>setCommentText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handlePostComment()} style={{flex:1}}/>
                       <button className="btn btn-primary btn-sm" onClick={handlePostComment}>Post</button>
