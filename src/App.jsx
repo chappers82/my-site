@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import { supabase } from "./supabase.js";
 
+// ─── HELPERS ──────────────────────────────────────────────────────────────
+const calcFees = (price, pct) => {
+  const commission = parseFloat((price * pct / 100).toFixed(2));
+  return { commission, sellerReceives: parseFloat((price - commission).toFixed(2)) };
+};
+
 // ─── EMAIL ────────────────────────────────────────────────────────────────
 const sendSoldEmail = async ({ listing, commissionPct }) => {
   const { commission, sellerReceives } = calcFees(listing.price, commissionPct);
@@ -80,10 +86,6 @@ const hexToRgba = (hex, alpha) => {
   } catch { return `rgba(201,169,110,${alpha})`; }
 };
 
-const calcFees = (price, pct) => {
-  const commission = parseFloat((price * pct / 100).toFixed(2));
-  return { commission, sellerReceives: parseFloat((price - commission).toFixed(2)) };
-};
 
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500&display=swap');
