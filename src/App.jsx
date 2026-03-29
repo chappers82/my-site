@@ -538,6 +538,7 @@ export default function TutuTrade() {
   const [view, setView] = useState("browse");
   const [boardSchoolId, setBoardSchoolId] = useState("general");
   const [comments, setComments] = useState([]);
+  const [commentCounts, setCommentCounts] = useState({});
   const [boardPosts, setBoardPosts] = useState([]);
   const [boardReplies, setBoardReplies] = useState([]);
   const [commentText, setCommentText] = useState("");
@@ -597,7 +598,7 @@ export default function TutuTrade() {
       if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); }
       else { setUserSchools([]); setIsAdmin(false); }
     });
-    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies();
+    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies(); loadCommentCounts();
     const ticker = setInterval(() => setTick(t => t + 1), 1000);
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
   }, []);
@@ -608,6 +609,14 @@ export default function TutuTrade() {
   const loadAds = async () => { const { data } = await supabase.from("ads").select("*").order("sort_order").order("created_at",{ascending:false}); if (data) setAds(data); };
   const loadSchools = async () => { const { data } = await supabase.from("schools").select("*").order("name"); if (data) setSchools(data); };
   const loadComments = async (listingId) => { const { data } = await supabase.from("listing_comments").select("*").eq("listing_id", listingId).order("created_at"); if (data) setComments(data); };
+  const loadCommentCounts = async () => {
+    const { data } = await supabase.from("listing_comments").select("listing_id").is("parent_id", null);
+    if (data) {
+      const counts = {};
+      data.forEach(c => { counts[c.listing_id] = (counts[c.listing_id] || 0) + 1; });
+      setCommentCounts(counts);
+    }
+  };
   const loadBoardPosts = async () => { const { data } = await supabase.from("board_posts").select("*").order("created_at",{ascending:false}); if (data) setBoardPosts(data); };
   const loadBoardReplies = async () => { const { data } = await supabase.from("board_replies").select("*").order("created_at"); if (data) setBoardReplies(data); };
   const loadCommission = async () => { const { data } = await supabase.from("settings").select("value").eq("key","commission_pct").single(); if (data) setCommissionPct(parseFloat(data.value)); };
@@ -971,6 +980,7 @@ export default function TutuTrade() {
     }]);
     await loadComments(selectedListing.id);
     setCommentText("");
+    await loadCommentCounts();
     // Email seller if they're not the one commenting
     if (selectedListing.seller_email !== user.email) {
       await sendResendEmail({
@@ -1848,10 +1858,15 @@ export default function TutuTrade() {
                           </div>
                           <div className="card-footer">
                             <div className="price" style={{textDecoration:l.sold?"line-through":"none",opacity:l.sold?0.5:1}}>£{l.price} <span>GBP</span></div>
-                            {l.sold
-                              ? <span style={{fontSize:".72rem",color:"#e07070",fontStyle:"italic"}}>Sold</span>
-                              : <button className="btn btn-sm" style={{background:"transparent",color:sc,border:`1px solid ${hexToRgba(sc,0.5)}`}} onClick={e=>{e.stopPropagation();setSelectedListing(l);setModal("detail");}}>View</button>
-                            }
+                            <div style={{display:"flex",alignItems:"center",gap:".4rem"}}>
+                              {commentCounts[l.id] > 0 && (
+                                <span style={{fontSize:".68rem",color:P.muted}}>💬 {commentCounts[l.id]}</span>
+                              )}
+                              {l.sold
+                                ? <span style={{fontSize:".72rem",color:"#e07070",fontStyle:"italic"}}>Sold</span>
+                                : <button className="btn btn-sm" style={{background:"transparent",color:sc,border:`1px solid ${hexToRgba(sc,0.5)}`}} onClick={e=>{e.stopPropagation();setSelectedListing(l);setModal("detail");loadComments(l.id);setCommentText("");}}>View</button>
+                              }
+                            </div>
                           </div>
                         </div>
                       </div>
