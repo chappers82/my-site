@@ -131,10 +131,11 @@ const css = `
   .school-filter-banner-sub{font-size:.75rem;margin-top:.15rem;opacity:.8}
 
   /* ADS */
-  .ad-banner{padding:1rem 1.5rem;background:${P.surface};border:1px solid ${P.border};border-radius:10px;margin-bottom:1.75rem;display:flex;align-items:center;gap:1.25rem;text-decoration:none;transition:border-color .2s;position:relative}
+  .ad-banner{padding:.75rem 1rem;background:${P.surface};border:1px solid ${P.border};border-radius:10px;margin-bottom:1.75rem;display:flex;align-items:center;gap:1.25rem;text-decoration:none;transition:border-color .2s;position:relative;overflow:hidden}
   .ad-banner:hover{border-color:rgba(201,169,110,.3)}
-  .ad-banner-label{position:absolute;top:.45rem;right:.6rem;font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:${P.muted};opacity:.7}
-  .ad-banner-icon{width:48px;height:48px;background:linear-gradient(135deg,#2a1f3d,#1e1729);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;flex-shrink:0;overflow:hidden}
+  .ad-banner-label{position:absolute;top:.45rem;right:.6rem;font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:${P.muted};opacity:.7;z-index:1}
+  .ad-banner-full-img{width:100%;height:80px;object-fit:cover;border-radius:6px;display:block}
+  .ad-banner-icon{width:56px;height:56px;background:linear-gradient(135deg,#2a1f3d,#1e1729);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;flex-shrink:0;overflow:hidden}
   .ad-banner-icon img{width:100%;height:100%;object-fit:cover}
   .ad-banner-text strong{display:block;font-size:.92rem;color:${P.text};margin-bottom:.15rem}
   .ad-banner-text span{font-size:.78rem;color:${P.muted}}
@@ -404,8 +405,14 @@ function AdBanner({ ad }) {
   return (
     <a className="ad-banner" href={ad.url} target="_blank" rel="noopener noreferrer">
       <span className="ad-banner-label">Ad</span>
-      <div className="ad-banner-icon">{ad.image ? <img src={ad.image} alt={ad.title}/> : "💃"}</div>
-      <div className="ad-banner-text"><strong>{ad.title}</strong><span>{ad.tagline}</span></div>
+      {ad.image ? (
+        <img src={ad.image} alt={ad.title} className="ad-banner-full-img"/>
+      ) : (
+        <>
+          <div className="ad-banner-icon">💃</div>
+          <div className="ad-banner-text"><strong>{ad.title}</strong><span>{ad.tagline}</span></div>
+        </>
+      )}
     </a>
   );
 }
@@ -750,14 +757,14 @@ export default function TutuTrade() {
 
   const handleAdminDeleteUser = async () => {
     if (!confirmDelete) return;
-    // Remove all user data (we can't delete auth users from frontend without service role)
     await supabase.from("user_schools").delete().eq("user_email", confirmDelete.email);
     await supabase.from("listings").delete().eq("seller_email", confirmDelete.email);
     await supabase.from("listing_comments").delete().eq("user_email", confirmDelete.email);
     await supabase.from("board_posts").delete().eq("user_email", confirmDelete.email);
     await supabase.from("board_replies").delete().eq("user_email", confirmDelete.email);
-    // Ban the user so they can't log in (requires service role - show instructions instead)
-    setSuccess(`${confirmDelete.full_name || confirmDelete.email} — all data removed. To fully delete their login, go to Supabase → Authentication → Users and delete them there.`);
+    // Delete the auth user via RPC function
+    await supabase.rpc("delete_user_by_email", { user_email: confirmDelete.email });
+    setSuccess(`${confirmDelete.full_name || confirmDelete.email} has been deleted.`);
     await loadAllUsers(); await loadAllUserSchools(); await loadListings();
     setConfirmDelete(null); setSelectedUser(null); setModal(null);
   };
