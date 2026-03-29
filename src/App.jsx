@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { supabase } from "./supabase.js";
 
 // ─── EMAIL ────────────────────────────────────────────────────────────────
@@ -1316,13 +1316,13 @@ export default function TutuTrade() {
                               {cd ? (
                                 <div className="countdown-timer">
                                   {[["d","Days"],["h","Hours"],["m","Mins"],["s","Secs"]].map(([k,label],i) => (
-                                    <React.Fragment key={k}>
+                                    <Fragment key={k}>
                                       {i > 0 && <span className="countdown-sep">:</span>}
                                       <div className="countdown-unit" style={{background:hexToRgba(sc,0.12)}}>
                                         <span className="countdown-num" style={{color:sc}}>{String(cd[k]).padStart(2,"0")}</span>
                                         <span className="countdown-label">{label}</span>
                                       </div>
-                                    </React.Fragment>
+                                    </Fragment>
                                   ))}
                                 </div>
                               ) : (
