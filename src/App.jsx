@@ -143,8 +143,8 @@ const css = `
   .ad-sidebar-card{padding:1rem;background:${P.surface};border:1px solid ${P.border};border-radius:10px;text-decoration:none;transition:border-color .2s;display:block}
   .ad-sidebar-card:hover{border-color:rgba(201,169,110,.3)}
   .ad-sidebar-label{font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:${P.muted};opacity:.7;margin-bottom:.5rem}
-  .ad-sidebar-icon{width:100%;height:64px;background:#1e1729;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem;margin-bottom:.65rem;overflow:hidden}
-  .ad-sidebar-icon img{width:100%;height:100%;object-fit:cover}
+  .ad-sidebar-icon{width:100%;height:120px;background:#1e1729;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:2rem;margin-bottom:.65rem;overflow:hidden}
+  .ad-sidebar-icon img{width:100%;height:100%;object-fit:contain;padding:.25rem}
   .ad-sidebar-card strong{display:block;font-size:.82rem;color:${P.text};margin-bottom:.2rem}
   .ad-sidebar-card span{font-size:.72rem;color:${P.muted};line-height:1.4}
   .ad-sidebar-cta{display:inline-block;margin-top:.6rem;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:${P.accent}}
@@ -511,7 +511,7 @@ export default function TutuTrade() {
   const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolId:"" });
   const [createError, setCreateError] = useState("");
   const [editingAd, setEditingAd] = useState(null);
-  const [adForm, setAdForm] = useState({ title:"", tagline:"", url:"", slot:"sidebar-top", scope:"global", school_id:null, active:true, image:null });
+  const [adForm, setAdForm] = useState({ title:"", tagline:"", url:"", slot:"sidebar-top", scope:"global", school_id:null, active:true, image:null, sort_order:0 });
   const [newSchoolForm, setNewSchoolForm] = useState({ name:"", code:"", color:"#c9a96e" });
   const [editingSchoolColor, setEditingSchoolColor] = useState(null);
   const [addSchoolCode, setAddSchoolCode] = useState("");
@@ -550,7 +550,7 @@ export default function TutuTrade() {
   useEffect(() => { if (isAdmin) { loadAllUserSchools(); loadAllUsers(); } }, [isAdmin]);
 
   const loadListings = async () => { const { data } = await supabase.from("listings").select("*").order("created_at",{ascending:false}); if (data) setListings(data); };
-  const loadAds = async () => { const { data } = await supabase.from("ads").select("*").order("created_at",{ascending:false}); if (data) setAds(data); };
+  const loadAds = async () => { const { data } = await supabase.from("ads").select("*").order("sort_order").order("created_at",{ascending:false}); if (data) setAds(data); };
   const loadSchools = async () => { const { data } = await supabase.from("schools").select("*").order("name"); if (data) setSchools(data); };
   const loadComments = async (listingId) => { const { data } = await supabase.from("listing_comments").select("*").eq("listing_id", listingId).order("created_at"); if (data) setComments(data); };
   const loadBoardPosts = async () => { const { data } = await supabase.from("board_posts").select("*").order("created_at",{ascending:false}); if (data) setBoardPosts(data); };
@@ -921,6 +921,7 @@ export default function TutuTrade() {
       slot: adForm.slot, active: adForm.active, image: adForm.image,
       scope: adForm.scope || "global",
       school_id: adForm.scope === "school" || adForm.scope === "both" ? adForm.school_id : null,
+      sort_order: Number(adForm.sort_order) || 0,
     };
     if (editingAd === "new") await supabase.from("ads").insert([payload]);
     else await supabase.from("ads").update(payload).eq("id", editingAd);
@@ -1282,21 +1283,22 @@ export default function TutuTrade() {
               <div className="admin-section">
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
                   <div className="admin-section-title" style={{marginBottom:0,borderBottom:"none",paddingBottom:0}}>📢 Advertisers</div>
-                  <button className="btn btn-primary btn-sm" onClick={() => { setEditingAd("new"); setAdForm({title:"",tagline:"",url:"",slot:"sidebar-top",scope:"global",school_id:null,active:true,image:null}); setModal("editAd"); }}>+ Add</button>
+                  <button className="btn btn-primary btn-sm" onClick={() => { setEditingAd("new"); setAdForm({title:"",tagline:"",url:"",slot:"sidebar-top",scope:"global",school_id:null,active:true,image:null,sort_order:0}); setModal("editAd"); }}>+ Add</button>
                 </div>
                 <table className="admin-table">
-                  <thead><tr><th>Advertiser</th><th>Slot</th><th>Scope</th><th>Status</th><th>Actions</th></tr></thead>
+                  <thead><tr><th>Advertiser</th><th>Position</th><th>Order</th><th>Scope</th><th>Status</th><th>Actions</th></tr></thead>
                   <tbody>
                     {ads.map(ad => (
                       <tr key={ad.id}>
                         <td><span className={`ad-dot ${ad.active?"active":"inactive"}`}/>{ad.title}<div style={{fontSize:".7rem",color:P.muted}}>{ad.tagline}</div></td>
-                        <td><span className="tag tag-style">{ad.slot}</span></td>
+                        <td><span className="tag tag-style" style={{fontSize:".62rem"}}>{ad.slot}</span></td>
+                        <td style={{color:P.muted,fontSize:".8rem"}}>#{ad.sort_order||0}</td>
                         <td style={{fontSize:".75rem",color:P.muted}}>
-                          {ad.scope === "school" ? `🏫 ${schools.find(s=>s.id===ad.school_id)?.name||"School"}` : ad.scope === "both" ? `✨ Global + ${schools.find(s=>s.id===ad.school_id)?.name||"School"}` : "🌐 Global"}
+                          {ad.scope === "school" ? `🏫 ${schools.find(s=>s.id===ad.school_id)?.name||"School"}` : ad.scope === "both" ? `✨ Both` : "🌐 Global"}
                         </td>
                         <td><button className={`btn ${ad.active?"btn-success":"btn-ghost"} btn-sm`} onClick={() => toggleAd(ad.id,ad.active)}>{ad.active?"Live":"Paused"}</button></td>
                         <td style={{display:"flex",gap:".4rem"}}>
-                          <button className="btn btn-ghost btn-sm" onClick={() => { setEditingAd(ad.id); setAdForm({title:ad.title,tagline:ad.tagline||"",url:ad.url,slot:ad.slot||"sidebar-top",scope:ad.scope||"global",school_id:ad.school_id||null,active:ad.active,image:ad.image||null}); setModal("editAd"); }}>Edit</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => { setEditingAd(ad.id); setAdForm({title:ad.title,tagline:ad.tagline||"",url:ad.url,slot:ad.slot||"sidebar-top",scope:ad.scope||"global",school_id:ad.school_id||null,active:ad.active,image:ad.image||null,sort_order:ad.sort_order||0}); setModal("editAd"); }}>Edit</button>
                           <button className="btn btn-danger btn-sm" onClick={() => deleteAd(ad.id)}>Remove</button>
                         </td>
                       </tr>
@@ -2007,6 +2009,13 @@ export default function TutuTrade() {
                   </select>
                 </div>
                 <div className="form-group"><label className="form-label">Status</label><select className="form-select" value={adForm.active?"true":"false"} onChange={e=>setAdForm(f=>({...f,active:e.target.value==="true"}))}><option value="true">Live</option><option value="false">Paused</option></select></div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Display order</label>
+                  <input className="form-input" type="number" min="0" max="99" placeholder="0" value={adForm.sort_order} onChange={e=>setAdForm(f=>({...f,sort_order:e.target.value}))}/>
+                  <div className="form-hint">Lower number = shown first. Use 1, 2, 3 to control order within the same slot.</div>
+                </div>
               </div>
               <div className="form-group">
                 <label className="form-label">Where to show</label>
