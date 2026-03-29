@@ -8,7 +8,7 @@ const calcFees = (price, pct) => {
 };
 
 // ─── EMAIL ────────────────────────────────────────────────────────────────
-const sendSoldEmail = async ({ listing, commissionPct }) => {
+const calcFees = (price, pct) => { const commission = parseFloat((price * pct / 100).toFixed(2)); return { commission, sellerReceives: parseFloat((price - commission).toFixed(2)) }; };`nconst sendSoldEmail = async ({ listing, commissionPct }) => {
   const { commission, sellerReceives } = calcFees(listing.price, commissionPct);
   try {
     await fetch("https://api.resend.com/emails", {
@@ -2055,3 +2055,4 @@ export default function TutuTrade() {
     </div>
   );
 }
+
