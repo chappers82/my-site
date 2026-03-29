@@ -50,6 +50,31 @@ const sendSoldEmail = async ({ listing, commissionPct }) => {
   } catch (e) { console.error("Email error:", e); }
 };
 
+const sendResendEmail = async ({ to, subject, html }) => {
+  if (!to || to === ADMIN_EMAIL) return; // don't email admin about their own actions
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_RESEND_API_KEY}` },
+      body: JSON.stringify({ from: "TutuTrade <onboarding@resend.dev>", to: [to], subject, html }),
+    });
+  } catch (e) { console.error("Notification email error:", e); }
+};
+
+const emailTemplate = (title, body) => `
+  <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:2rem;background:#1a1228;color:#f0eaf8;border-radius:12px">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem">
+      <div style="width:34px;height:34px;background:linear-gradient(135deg,#c9a96e,#e8a0b4);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1rem">🩰</div>
+      <div style="font-family:Georgia,serif;font-size:1.2rem;color:#e8d5aa">TutuTrade</div>
+    </div>
+    <h2 style="color:#c9a96e;margin-bottom:1rem;font-family:Georgia,serif">${title}</h2>
+    ${body}
+    <div style="margin-top:2rem;padding-top:1rem;border-top:1px solid #3d2f5c;font-size:.72rem;color:#8a7a9e">
+      You're receiving this because you have an active listing or post on TutuTrade. Visit <a href="https://tututrade.co.uk" style="color:#c9a96e">tututrade.co.uk</a> to respond.
+    </div>
+  </div>
+`;
+
 const DANCE_STYLES = ["Ballet","Jazz","Tap","Contemporary","Hip Hop","Musical Theatre","Acro","Irish","Ballroom","Lyrical"];
 const SIZES = ["Age 2-3","Age 3-4","Age 4-5","Age 5-6","Age 6-7","Age 7-8","Age 8-9","Age 9-10","Age 10-11","Age 11-12","Teen XS","Teen S","Teen M","Teen L","Adult XS","Adult S","Adult M","Adult L","Adult XL"];
 const SHOE_SIZES = ["UK 6 (Infant)","UK 7 (Infant)","UK 8 (Infant)","UK 9 (Infant)","UK 10 (Infant)","UK 11 (Infant)","UK 12 (Infant)","UK 13 (Infant)","UK 1","UK 2","UK 3","UK 4","UK 5","UK 6","UK 7","UK 8","UK 9","UK 10"];
@@ -914,14 +939,27 @@ export default function TutuTrade() {
   // ── COMMENTS ──
   const handlePostComment = async () => {
     if (!commentText.trim() || !selectedListing) return;
+    const userName = user.user_metadata?.full_name || user.email;
     await supabase.from("listing_comments").insert([{
       listing_id: selectedListing.id,
       user_email: user.email,
-      user_name: user.user_metadata?.full_name || user.email,
+      user_name: userName,
       message: commentText.trim(),
     }]);
     await loadComments(selectedListing.id);
     setCommentText("");
+    // Email seller if they're not the one commenting
+    if (selectedListing.seller_email !== user.email) {
+      await sendResendEmail({
+        to: selectedListing.seller_email,
+        subject: `💬 New question on your listing — ${selectedListing.title}`,
+        html: emailTemplate("Someone asked a question!", `
+          <p style="color:#a892c4;margin-bottom:1rem"><strong style="color:#f0eaf8">${userName}</strong> asked a question on your listing <strong style="color:#e8d5aa">${selectedListing.title}</strong>:</p>
+          <div style="padding:1rem;background:#2d2142;border-left:3px solid #c9a96e;border-radius:6px;color:#f0eaf8;margin-bottom:1.25rem">${commentText.trim()}</div>
+          <p style="color:#a892c4">Log in to TutuTrade to reply — your response will be visible to all buyers.</p>
+        `),
+      });
+    }
   };
 
   const handleDeleteComment = async (id) => {
@@ -931,16 +969,33 @@ export default function TutuTrade() {
 
   const handlePostCommentReply = async (parentId) => {
     if (!commentReplyText.trim() || !selectedListing) return;
+    const userName = user.user_metadata?.full_name || user.email;
+    // Find the original commenter to notify
+    const originalComment = comments.find(c => c.id === parentId);
     await supabase.from("listing_comments").insert([{
       listing_id: selectedListing.id,
       user_email: user.email,
-      user_name: user.user_metadata?.full_name || user.email,
+      user_name: userName,
       message: commentReplyText.trim(),
       parent_id: parentId,
     }]);
     await loadComments(selectedListing.id);
     setCommentReplyText("");
     setReplyingTo(null);
+    // Email the original commenter if someone else replied
+    if (originalComment && originalComment.user_email !== user.email) {
+      await sendResendEmail({
+        to: originalComment.user_email,
+        subject: `↩ Someone replied to your question on TutuTrade`,
+        html: emailTemplate("Your question got a reply!", `
+          <p style="color:#a892c4;margin-bottom:.5rem">Your question on <strong style="color:#e8d5aa">${selectedListing.title}</strong>:</p>
+          <div style="padding:.75rem 1rem;background:#2d2142;border-radius:6px;color:#8a7a9e;margin-bottom:1rem;font-style:italic">${originalComment.message}</div>
+          <p style="color:#a892c4;margin-bottom:.5rem"><strong style="color:#f0eaf8">${userName}</strong> replied:</p>
+          <div style="padding:1rem;background:#2d2142;border-left:3px solid #c9a96e;border-radius:6px;color:#f0eaf8;margin-bottom:1.25rem">${commentReplyText.trim()}</div>
+          <p style="color:#a892c4">Visit TutuTrade to continue the conversation.</p>
+        `),
+      });
+    }
   };
 
   // ── BOARD ──
@@ -961,13 +1016,29 @@ export default function TutuTrade() {
   const handlePostReply = async (postId) => {
     const text = replyText[postId];
     if (!text?.trim()) return;
+    const userName = user.user_metadata?.full_name || user.email;
+    const post = boardPosts.find(p => p.id === postId);
     await supabase.from("board_replies").insert([{
       post_id: postId,
       user_email: user.email,
-      user_name: user.user_metadata?.full_name || user.email,
+      user_name: userName,
       message: text.trim(),
     }]);
     await loadBoardReplies();
+    setReplyText(t => ({ ...t, [postId]:"" }));
+    // Email the post author if someone else replied
+    if (post && post.user_email !== user.email) {
+      await sendResendEmail({
+        to: post.user_email,
+        subject: `↩ Someone replied to your board post — ${post.title}`,
+        html: emailTemplate("Your post got a reply!", `
+          <p style="color:#a892c4;margin-bottom:.5rem">Your post: <strong style="color:#e8d5aa">${post.title}</strong></p>
+          <p style="color:#a892c4;margin-bottom:.5rem"><strong style="color:#f0eaf8">${userName}</strong> replied:</p>
+          <div style="padding:1rem;background:#2d2142;border-left:3px solid #c9a96e;border-radius:6px;color:#f0eaf8;margin-bottom:1.25rem">${text.trim()}</div>
+          <p style="color:#a892c4">Visit the TutuTrade community board to continue the conversation.</p>
+        `),
+      });
+    }
     setReplyText(t => ({ ...t, [postId]:"" }));
   };
 
