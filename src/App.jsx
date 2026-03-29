@@ -657,7 +657,16 @@ export default function TutuTrade() {
     const s = Math.floor((diff % 60000) / 1000);
     return { d, h, m, s };
   };
-  const loadUserSchools = async (email) => { const { data } = await supabase.from("user_schools").select("*").eq("user_email",email); if (data) setUserSchools(data); };
+  const loadUserSchools = async (email) => {
+    const { data } = await supabase.from("user_schools").select("*").eq("user_email", email);
+    if (data) {
+      setUserSchools(data);
+      // Auto-filter to their school if they only belong to one
+      if (data.length === 1) {
+        setFilters(f => ({ ...f, school: data[0].school_id }));
+      }
+    }
+  };
   const loadAllUserSchools = async () => { const { data } = await supabase.from("user_schools").select("*"); if (data) setAllUserSchools(data); };
   const loadAllUsers = async () => { const { data } = await supabase.from("user_profiles").select("*"); if (data) setAllUsers(data); };
 
@@ -1712,7 +1721,12 @@ export default function TutuTrade() {
                     );
                   })}
                 </div>
-                {filters.school && (
+                {!filters.school && userSchools.length > 1 && (
+                  <p style={{fontSize:".75rem",color:P.muted,marginTop:".25rem"}}>
+                    👆 Click your school to see events, exclusive listings and more
+                  </p>
+                )}
+                {filters.school && userSchools.length > 1 && (
                   <button style={{background:"none",border:"none",color:P.muted,fontSize:".75rem",cursor:"pointer",textDecoration:"underline",fontFamily:"'Jost',sans-serif"}} onClick={() => setFilters(f=>({...f,school:""}))}>
                     Clear filter — show all schools
                   </button>
