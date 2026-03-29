@@ -15,15 +15,11 @@ const calcFees = (price, pct) => {
 const sendSoldEmail = async ({ listing, commissionPct }) => {
   const { commission, sellerReceives } = calcFees(listing.price, commissionPct);
   try {
-    await fetch("https://api.resend.com/emails", {
+    await fetch("/.netlify/functions/send-email", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${import.meta.env.VITE_RESEND_API_KEY}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        from: "TutuTrade <hello@tututrade.co.uk>",
-        to: [ADMIN_EMAIL],
+        to: ADMIN_EMAIL,
         subject: `💰 Sale: ${listing.title} — £${listing.price}`,
         html: `
           <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:2rem;background:#0d0a14;color:#f0eaf8;border-radius:12px">
@@ -52,12 +48,12 @@ const sendSoldEmail = async ({ listing, commissionPct }) => {
 };
 
 const sendResendEmail = async ({ to, subject, html }) => {
-  if (!to || to === ADMIN_EMAIL) return; // don't email admin about their own actions
+  if (!to || to === ADMIN_EMAIL) return;
   try {
-    await fetch("https://api.resend.com/emails", {
+    await fetch("/.netlify/functions/send-email", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_RESEND_API_KEY}` },
-      body: JSON.stringify({ from: "TutuTrade <hello@tututrade.co.uk>", to: [to], subject, html }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to, subject, html }),
     });
   } catch (e) { console.error("Notification email error:", e); }
 };
