@@ -89,7 +89,7 @@ const hexToRgba = (hex, alpha) => {
 };
 
 
-const css = `
+function getCSS() { return `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:${P.bg};color:${P.text};font-family:'Jost',sans-serif;min-height:100vh}
@@ -350,7 +350,7 @@ const css = `
   .event-item-info{flex:1}
   .event-item-title{font-size:.88rem;color:${P.text};font-weight:500}
   .event-item-meta{font-size:.73rem;color:${P.muted};margin-top:.2rem}
-`;
+`; }
 
 function PixieDust() {
   const canvasRef = useRef(null);
@@ -967,11 +967,11 @@ export default function TutuTrade() {
   const totalRevenue = listings.reduce((s, l) => s + calcFees(l.price, getCommission(l.school_id)).commission, 0);
   const activeSchoolFilter = filters.school ? getSchool(filters.school) : null;
 
-  if (loading) return <div className="app"><style>{css}</style><div className="loading" style={{paddingTop:"5rem"}}>Loading TutuTrade...</div></div>;
+  if (loading) return <div className="app"><style>{getCSS()}</style><div className="loading" style={{paddingTop:"5rem"}}>Loading TutuTrade...</div></div>;
 
   return (
     <div className="app">
-      <style>{css}</style>
+      <style>{getCSS()}</style>
       <PixieDust />
 
       {/* HEADER */}
