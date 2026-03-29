@@ -1762,7 +1762,7 @@ export default function TutuTrade() {
       {modal === "detail" && selectedListing && (() => {
         const effectiveCommission = getCommission(selectedListing.school_id);
         const { commission } = calcFees(selectedListing.price, effectiveCommission);
-        const isOwner = user?.email === selectedListing.seller_email;
+        const isOwner = user?.email === selectedListing.seller_email || isAdmin;
         const sc = getSchoolColor(selectedListing.school_id);
         return (
           <div className="overlay" onClick={closeModal}>
