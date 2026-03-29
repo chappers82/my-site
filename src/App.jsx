@@ -545,7 +545,7 @@ export default function TutuTrade() {
   const [editingSchoolColor, setEditingSchoolColor] = useState(null);
   const [addSchoolCode, setAddSchoolCode] = useState("");
   const [addSchoolError, setAddSchoolError] = useState("");
-  const [accountForm, setAccountForm] = useState({ email:"", password:"", confirmPassword:"" });
+  const [accountForm, setAccountForm] = useState({ email:"", password:"", confirmPassword:"", displayName:"" });
   const [accountMsg, setAccountMsg] = useState("");
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
   const [copiedLink, setCopiedLink] = useState(null);
@@ -690,6 +690,23 @@ export default function TutuTrade() {
     if (error) return setAccountMsg(`Error: ${error.message}`);
     setAccountMsg("✓ Confirmation sent to your new email address. Click the link to confirm the change.");
     setAccountForm(f => ({ ...f, email: "" }));
+  };
+
+  const handleUpdateDisplayName = async () => {
+    setAccountMsg("");
+    if (!accountForm.displayName.trim()) return setAccountMsg("Please enter a display name.");
+    const { error } = await supabase.auth.updateUser({ data: { full_name: accountForm.displayName.trim() } });
+    if (error) return setAccountMsg(`Error: ${error.message}`);
+    // Update name on all their listings too
+    await supabase.from("listings").update({ seller_name: accountForm.displayName.trim() }).eq("seller_email", user.email);
+    await supabase.from("listing_comments").update({ user_name: accountForm.displayName.trim() }).eq("user_email", user.email);
+    await supabase.from("board_posts").update({ user_name: accountForm.displayName.trim() }).eq("user_email", user.email);
+    await supabase.from("board_replies").update({ user_name: accountForm.displayName.trim() }).eq("user_email", user.email);
+    setAccountMsg("✓ Display name updated across all your listings and posts.");
+    setAccountForm(f => ({ ...f, displayName: "" }));
+    // Refresh user
+    const { data } = await supabase.auth.getUser();
+    if (data?.user) setUser(data.user);
   };
 
   const handleUpdatePassword = async () => {
@@ -1480,6 +1497,16 @@ export default function TutuTrade() {
               <div style={{marginTop:"1.5rem"}}>
                 <div style={{fontSize:".72rem",textTransform:"uppercase",letterSpacing:".1em",color:P.muted,marginBottom:".75rem"}}>Account Settings</div>
                 {accountMsg && <div style={{padding:".65rem .85rem",background:accountMsg.startsWith("✓")?"rgba(111,207,151,.1)":"rgba(224,112,112,.1)",border:`1px solid ${accountMsg.startsWith("✓")?"rgba(111,207,151,.3)":"rgba(224,112,112,.3)"}`,borderRadius:7,fontSize:".78rem",color:accountMsg.startsWith("✓")?P.success:"#e07070",marginBottom:"1rem"}}>{accountMsg}</div>}
+
+                <div style={{padding:"1rem",background:P.surface,border:`1px solid ${P.border}`,borderRadius:10,marginBottom:".75rem"}}>
+                  <div className="form-label" style={{marginBottom:".25rem"}}>Change Display Name</div>
+                  <div style={{fontSize:".73rem",color:P.muted,marginBottom:".65rem"}}>Currently: <strong style={{color:P.accentSoft}}>{user.user_metadata?.full_name || user.email}</strong></div>
+                  <div style={{display:"flex",gap:".5rem"}}>
+                    <input className="form-input" type="text" placeholder="Your new display name" value={accountForm.displayName} onChange={e=>setAccountForm(f=>({...f,displayName:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&handleUpdateDisplayName()} style={{flex:1}}/>
+                    <button className="btn btn-primary btn-sm" onClick={handleUpdateDisplayName}>Update</button>
+                  </div>
+                  <div className="form-hint">This updates your name on all listings, comments and board posts.</div>
+                </div>
 
                 <div style={{padding:"1rem",background:P.surface,border:`1px solid ${P.border}`,borderRadius:10,marginBottom:".75rem"}}>
                   <div className="form-label" style={{marginBottom:".75rem"}}>Change Email</div>
