@@ -159,8 +159,8 @@ const css = `
   .filter-select option{background:${P.card}}
 
   /* NAV */
-  .nav-pills{display:flex;gap:.5rem;margin-bottom:1.25rem;flex-wrap:wrap}
-  .nav-pill{padding:.45rem 1rem;border-radius:20px;background:transparent;border:1px solid ${P.border};color:${P.muted};font-family:'Jost',sans-serif;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .2s}
+  .nav-pills{display:flex;gap:.5rem;margin-bottom:2rem;flex-wrap:wrap;padding-top:.5rem}
+  .nav-pill{padding:.5rem 1.25rem;border-radius:20px;background:transparent;border:1px solid ${P.border};color:${P.muted};font-family:'Jost',sans-serif;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .2s}
   .nav-pill.active{background:rgba(201,169,110,.12);border-color:${P.accent};color:${P.accent}}
 
   /* GRID & CARDS */
@@ -1621,8 +1621,8 @@ export default function TutuTrade() {
 
             {/* ── BOARD VIEW ── */}
             {view === "board" && (
-              <div style={{maxWidth:720}}>
-                <div style={{marginBottom:"1.5rem"}}>
+              <div style={{maxWidth:720,paddingTop:"1.5rem"}}>
+                <div style={{marginBottom:"2rem",paddingBottom:"1.5rem",borderBottom:`1px solid ${P.border}`}}>
                   <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"1.5rem",color:P.accentSoft,marginBottom:".3rem"}}>💬 Community Board</h2>
                   <p style={{fontSize:".82rem",color:P.muted}}>Ask questions, find items, share tips with your dance community.</p>
                 </div>
@@ -2055,4 +2055,3 @@ export default function TutuTrade() {
     </div>
   );
 }
- 
