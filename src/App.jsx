@@ -392,7 +392,7 @@ function PixieDust() {
     const originX = 48, originY = 36;
 
     // ── ONE-TIME BURST from logo — slower and more graceful ──
-    const particles = Array.from({ length: 90 }, (_, i) => ({
+    const dustParticles = Array.from({ length: 90 }, (_, i) => ({
       x: originX + (Math.random() * 20 - 10),
       y: originY + (Math.random() * 20 - 10),
       vx: Math.random() * 2.5 + 0.3,   // slower
@@ -515,7 +515,7 @@ function PixieDust() {
       // ── Burst particles ──
       if (!burstDone) {
         let alive = 0;
-        particles.forEach(p => {
+        dustParticles.forEach(p => {
           if (p.done) return;
           if (p.delay > 0) { p.delay--; alive++; return; }
           p.vx += p.ax; p.vy += p.ay;
@@ -563,11 +563,11 @@ function PixieDust() {
       }
 
       // ── Click burst particles ──
-      for (let i = clickParticles.length - 1; i >= 0; i--) {
-        const p = clickParticles[i];
+      for (let i = sparkBursts.length - 1; i >= 0; i--) {
+        const p = sparkBursts[i];
         p.vx *= 0.94; p.vy *= 0.94; p.vy += p.ay;
         p.x += p.vx; p.y += p.vy; p.opacity -= p.fade;
-        if (p.opacity <= 0) { clickParticles.splice(i, 1); continue; }
+        if (p.opacity <= 0) { sparkBursts.splice(i, 1); continue; }
         drawStar(p.x, p.y, p.size, p.hue, p.opacity);
       }
 
@@ -577,12 +577,12 @@ function PixieDust() {
     draw();
 
     // ── CLICK BURSTS ──
-    const clickParticles = [];
+    const sparkBursts = [];
     const addClickBurst = (x, y) => {
       for (let i = 0; i < 24; i++) {
         const angle = (Math.PI * 2 * i) / 24 + Math.random() * 0.3;
         const speed = Math.random() * 4 + 1.5;
-        clickParticles.push({
+        sparkBursts.push({
           x, y,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
