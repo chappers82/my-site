@@ -80,11 +80,12 @@ const CONDITIONS = ["New with tags","Excellent","Good","Well loved"];
 const styleEmoji = {Ballet:"🩰",Jazz:"✨",Tap:"🎩",Contemporary:"🌊","Hip Hop":"🎤","Musical Theatre":"🎭",Acro:"🤸",Irish:"☘️",Ballroom:"💃",Lyrical:"🕊️"};
 const conditionKey = {"New with tags":"new","Excellent":"excellent","Good":"good","Well loved":"worn"};
 
-const P = {
+function getP() { return {
   bg:"#1a1228",surface:"#231934",card:"#2d2142",border:"#3d2f5c",
   accent:"#c9a96e",accentSoft:"#e8d5aa",pink:"#e8a0b4",
   text:"#f0eaf8",muted:"#a892c4",success:"#6fcf97",admin:"#9d8fe0",
-};
+}; }
+const P = getP();
 
 const PRESET_COLORS = [
   // Golds & Warm
