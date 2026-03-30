@@ -250,7 +250,7 @@ function getCSS(P) { return `
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem;animation:fadeIn .2s ease}
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
   @keyframes slideUp{from{transform:translateY(18px);opacity:0}to{transform:translateY(0);opacity:1}}
-  .modal{background:${P.surface};border:1px solid ${P.border};border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;animation:slideUp .25s ease}
+  .modal{background:${P.surface};border:1px solid ${P.border};border-radius:14px;width:100%;max-width:min(520px,calc(100vw - 2rem));max-height:90vh;overflow-y:auto;box-sizing:border-box;animation:slideUp .25s ease}
   .modal-header{padding:1.4rem 1.4rem 0;display:flex;align-items:flex-start;justify-content:space-between}
   .modal-title{font-family:'Playfair Display',serif;font-size:1.3rem;color:${P.accentSoft}}
   .modal-title.admin-title{color:#a99ef0}
@@ -350,7 +350,7 @@ function getCSS(P) { return `
   .comment-text{color:${P.text};line-height:1.5}
   .comment-input-row{display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap}
   .comment-input-row .form-input{flex:1;min-width:0}
-  @media(max-width:600px){.overlay{align-items:flex-start;overflow-y:auto}.modal{max-height:none;-webkit-overflow-scrolling:touch}}
+  @media(max-width:600px){.overlay{align-items:flex-start;overflow-y:auto;padding:.75rem}.modal{max-height:none;width:calc(100vw - 1.5rem);-webkit-overflow-scrolling:touch}}
 
   /* BOARD */
   .board-filters{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.25rem}
