@@ -702,7 +702,7 @@ export default function TutuTrade() {
   const [moveUserSchool, setMoveUserSchool] = useState({ fromId:"", toId:"" });
   const [darkMode, setDarkMode] = useState(true);
   const [wantedPosts, setWantedPosts] = useState([]);
-  const [wantedForm, setWantedForm] = useState({ title:"", style:"", size:"", description:"" });
+  const [wantedForm, setWantedForm] = useState({ title:"", style:"", size:"", description:"", images:[] });
   const [wantedSchoolId, setWantedSchoolId] = useState("general");
   const [editingWanted, setEditingWanted] = useState(null);
   const [editingBoardPost, setEditingBoardPost] = useState(null);
@@ -942,6 +942,19 @@ export default function TutuTrade() {
       const newImages = f.images.filter((_, i) => i !== index);
       return { ...f, images: newImages, image: newImages[0] || null };
     });
+  };
+
+  const handleWantedImageUpload = (e, setter) => {
+    const files = Array.from(e.target.files).slice(0, 3);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = ev => setter(f => ({ ...f, images: [...(f.images || []).slice(0, 2), ev.target.result] }));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeWantedImage = (index, setter) => {
+    setter(f => ({ ...f, images: f.images.filter((_, i) => i !== index) }));
   };
 
   const handleCreate = async () => {
@@ -1230,10 +1243,11 @@ export default function TutuTrade() {
       dance_style: wantedForm.style || null,
       size: wantedForm.size || null,
       description: wantedForm.description.trim() || null,
+      images: wantedForm.images || [],
       fulfilled: false,
     }]);
     await loadWantedPosts();
-    setWantedForm({ title:"", style:"", size:"", description:"" });
+    setWantedForm({ title:"", style:"", size:"", description:"", images:[] });
   };
 
   const handleDeleteWanted = async (id) => {
@@ -1253,6 +1267,7 @@ export default function TutuTrade() {
       dance_style: editingWanted.style || null,
       size: editingWanted.size || null,
       description: editingWanted.description?.trim() || null,
+      images: editingWanted.images || [],
     }).eq("id", id);
     await loadWantedPosts();
     setEditingWanted(null);
@@ -2207,6 +2222,22 @@ export default function TutuTrade() {
                     <div className="form-group" style={{marginBottom:".5rem"}}>
                       <textarea className="form-textarea" style={{minHeight:52}} placeholder="Extra details (optional)..." value={wantedForm.description} onChange={e=>setWantedForm(f=>({...f,description:e.target.value}))}/>
                     </div>
+                    <div className="form-group" style={{marginBottom:".75rem"}}>
+                      <label className="upload-area" style={{padding:".6rem"}}>
+                        <input type="file" accept="image/*" multiple onChange={e=>handleWantedImageUpload(e,setWantedForm)}/>
+                        📷 Add reference photos (optional, up to 3)
+                      </label>
+                      {wantedForm.images.length > 0 && (
+                        <div className="multi-upload-grid" style={{marginTop:".5rem"}}>
+                          {wantedForm.images.map((img,i) => (
+                            <div key={i} className="multi-upload-thumb">
+                              <img src={img} alt=""/>
+                              <button className="multi-upload-remove" onClick={()=>removeWantedImage(i,setWantedForm)}>×</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <button className="btn btn-primary btn-sm" onClick={handlePostWanted}>Post request</button>
                   </div>
                 )}
@@ -2233,6 +2264,22 @@ export default function TutuTrade() {
                             </select>
                           </div>
                           <div className="form-group" style={{marginBottom:".5rem"}}><textarea className="form-textarea" style={{minHeight:48}} value={editingWanted.description} onChange={e=>setEditingWanted(f=>({...f,description:e.target.value}))} placeholder="Extra details..."/></div>
+                          <div className="form-group" style={{marginBottom:".5rem"}}>
+                            <label className="upload-area" style={{padding:".5rem"}}>
+                              <input type="file" accept="image/*" multiple onChange={e=>handleWantedImageUpload(e,setEditingWanted)}/>
+                              📷 Add/replace photos (up to 3)
+                            </label>
+                            {editingWanted.images?.length > 0 && (
+                              <div className="multi-upload-grid" style={{marginTop:".4rem"}}>
+                                {editingWanted.images.map((img,i) => (
+                                  <div key={i} className="multi-upload-thumb">
+                                    <img src={img} alt=""/>
+                                    <button className="multi-upload-remove" onClick={()=>removeWantedImage(i,setEditingWanted)}>×</button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           <div style={{display:"flex",gap:".5rem"}}>
                             <button className="btn btn-primary btn-sm" onClick={() => handleUpdateWanted(post.id)}>Save</button>
                             <button className="btn btn-ghost btn-sm" onClick={() => setEditingWanted(null)}>Cancel</button>
@@ -2251,12 +2298,19 @@ export default function TutuTrade() {
                             </div>
                           )}
                           {post.description && <div className="wanted-post-desc">{post.description}</div>}
+                          {post.images?.length > 0 && (
+                            <div className="image-gallery" style={{marginTop:".5rem",marginBottom:".25rem"}}>
+                              {post.images.map((img,i) => (
+                                <img key={i} src={img} alt="" style={{height:100,width:"auto",minWidth:100,objectFit:"cover",borderRadius:6,cursor:"zoom-in",flexShrink:0}} onClick={()=>setLightboxImage(img)}/>
+                              ))}
+                            </div>
+                          )}
                           <div className="wanted-post-meta">
                             <span style={{color:sc}}>{post.user_name}</span>
                             <span>{new Date(post.created_at).toLocaleDateString("en-GB")}</span>
                             {post.school_id && <span>🏫 {schools.find(s=>s.id===post.school_id)?.name}</span>}
                             {user?.email === post.user_email && !post.fulfilled && (
-                              <button style={{background:"none",border:"none",color:P.accent,cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif"}} onClick={() => setEditingWanted({id:post.id,title:post.title,style:post.dance_style||"",size:post.size||"",description:post.description||""})}>Edit</button>
+                              <button style={{background:"none",border:"none",color:P.accent,cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif"}} onClick={() => setEditingWanted({id:post.id,title:post.title,style:post.dance_style||"",size:post.size||"",description:post.description||"",images:post.images||[]})}>Edit</button>
                             )}
                             {user?.email === post.user_email && !post.fulfilled && (
                               <button style={{background:"none",border:"none",color:P.success,cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif"}} onClick={() => handleFulfillWanted(post.id, post.fulfilled)}>✓ Mark as found</button>
