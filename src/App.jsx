@@ -411,11 +411,11 @@ function PixieDust() {
     // ── ONE-TIME DUST BURST from logo ──
     const tutuDust = Array.from({length:80}, (_,tutuIdx) => ({
       tutuX: 48+(Math.random()*20-10), tutuY: 36+(Math.random()*20-10),
-      tutuVX: Math.random()*0.9+0.1, tutuVY: Math.random()*0.6-0.15,
-      tutuAX: -0.002, tutuAY: 0.018,
+      tutuVX: Math.random()*1.2+0.15, tutuVY: Math.random()*0.6-0.15,
+      tutuAX: -0.0005, tutuAY: 0.018,
       tutuSize: Math.random()*2.5+0.8,
       tutuOpacity: Math.random()*0.6+0.4,
-      tutuFade: Math.random()*0.0012+0.0004,
+      tutuFade: Math.random()*0.0008+0.0002,
       tutuHue: Math.random()*25+38,
       tutuDelay: tutuIdx*2.5, tutuDone: false,
     }));
