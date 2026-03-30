@@ -350,7 +350,7 @@ function getCSS(P) { return `
   .comment-text{color:${P.text};line-height:1.5}
   .comment-input-row{display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap}
   .comment-input-row .form-input{flex:1;min-width:0}
-  @media(max-width:600px){.overlay{align-items:flex-start;overflow-y:auto;padding:.75rem}.modal{max-height:none;width:calc(100vw - 1.5rem);-webkit-overflow-scrolling:touch}}
+  @media(max-width:600px){.overlay{align-items:flex-start;overflow-y:auto;padding:.75rem;justify-content:flex-start}.modal{max-height:none;width:calc(100vw - 1.5rem);margin:0 auto;-webkit-overflow-scrolling:touch}}
 
   /* BOARD */
   .board-filters{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.25rem}
