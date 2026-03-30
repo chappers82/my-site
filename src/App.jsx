@@ -704,6 +704,8 @@ export default function TutuTrade() {
   const [wantedPosts, setWantedPosts] = useState([]);
   const [wantedForm, setWantedForm] = useState({ title:"", style:"", size:"", description:"" });
   const [wantedSchoolId, setWantedSchoolId] = useState("general");
+  const [editingWanted, setEditingWanted] = useState(null);
+  const [editingBoardPost, setEditingBoardPost] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -728,6 +730,12 @@ export default function TutuTrade() {
   }, []);
 
   useEffect(() => { if (isAdmin) { loadAllUserSchools(); loadAllUsers(); } }, [isAdmin]);
+  useEffect(() => {
+    if (userSchools.length > 0) {
+      setBoardSchoolId(s => s === "general" ? userSchools[0].school_id : s);
+      setWantedSchoolId(s => s === "general" ? userSchools[0].school_id : s);
+    }
+  }, [userSchools]);
 
   const loadListings = async () => { const { data } = await supabase.from("listings").select("*").order("created_at",{ascending:false}); if (data) setListings(data); };
   const loadAds = async () => { const { data } = await supabase.from("ads").select("*").order("sort_order").order("created_at",{ascending:false}); if (data) setAds(data); };
@@ -1236,6 +1244,28 @@ export default function TutuTrade() {
   const handleFulfillWanted = async (id, current) => {
     await supabase.from("wanted_posts").update({ fulfilled: !current }).eq("id", id);
     await loadWantedPosts();
+  };
+
+  const handleUpdateWanted = async (id) => {
+    if (!editingWanted?.title?.trim()) return;
+    await supabase.from("wanted_posts").update({
+      title: editingWanted.title.trim(),
+      dance_style: editingWanted.style || null,
+      size: editingWanted.size || null,
+      description: editingWanted.description?.trim() || null,
+    }).eq("id", id);
+    await loadWantedPosts();
+    setEditingWanted(null);
+  };
+
+  const handleUpdateBoardPost = async (id) => {
+    if (!editingBoardPost?.title?.trim()) return;
+    await supabase.from("board_posts").update({
+      title: editingBoardPost.title.trim(),
+      message: editingBoardPost.message.trim(),
+    }).eq("id", id);
+    await loadBoardPosts();
+    setEditingBoardPost(null);
   };
 
   const handleAdminResetPassword = async (email) => {
@@ -2083,17 +2113,29 @@ export default function TutuTrade() {
                   const sc = post.school_id ? getSchoolColor(post.school_id) : P.accent;
                   return (
                     <div key={post.id} className="board-post" style={{borderLeft:`3px solid ${sc}`}}>
+                      {editingBoardPost?.id === post.id ? (
+                        <div style={{padding:".85rem 1rem"}}>
+                          <div className="form-group"><input className="form-input" value={editingBoardPost.title} onChange={e=>setEditingBoardPost(f=>({...f,title:e.target.value}))} placeholder="Title"/></div>
+                          <div className="form-group" style={{marginBottom:".5rem"}}><textarea className="form-textarea" style={{minHeight:60}} value={editingBoardPost.message} onChange={e=>setEditingBoardPost(f=>({...f,message:e.target.value}))} placeholder="Message"/></div>
+                          <div style={{display:"flex",gap:".5rem"}}>
+                            <button className="btn btn-primary btn-sm" onClick={() => handleUpdateBoardPost(post.id)}>Save</button>
+                            <button className="btn btn-ghost btn-sm" onClick={() => setEditingBoardPost(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
                       <div className="board-post-header" onClick={() => setExpandedPost(isOpen ? null : post.id)}>
                         <div className="board-post-title">{post.title}</div>
                         <div className="board-post-meta">
                           <span style={{color:sc}}>{post.user_name}</span>
                           <span>{new Date(post.created_at).toLocaleDateString("en-GB")}</span>
                           <span>{replies.length} {replies.length===1?"reply":"replies"}</span>
+                          {user?.email === post.user_email && <button style={{background:"none",border:"none",color:P.muted,cursor:"pointer",fontSize:".75rem",fontFamily:"'Jost',sans-serif"}} onClick={e=>{e.stopPropagation();setEditingBoardPost({id:post.id,title:post.title,message:post.message});}}>Edit</button>}
                           {(user?.email === post.user_email || isAdmin) && <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".75rem",fontFamily:"'Jost',sans-serif"}} onClick={e=>{e.stopPropagation();handleDeletePost(post.id);}}>Remove</button>}
                           <span style={{color:P.muted}}>{isOpen?"▲":"▼"}</span>
                         </div>
                       </div>
-                      {isOpen && (
+                      )}
+                      {isOpen && editingBoardPost?.id !== post.id && (
                         <>
                           <div className="board-post-body">{post.message}</div>
                           <div className="board-replies">
@@ -2177,31 +2219,57 @@ export default function TutuTrade() {
                   const sc = post.school_id ? getSchoolColor(post.school_id) : P.accent;
                   return (
                     <div key={post.id} className={`wanted-post ${post.fulfilled?"fulfilled":""}`} style={{borderLeft:`3px solid ${sc}`}}>
-                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:".5rem"}}>
-                        <div className="wanted-post-title">{post.title}</div>
-                        {post.fulfilled && <span className="wanted-fulfilled-badge">✓ Found</span>}
-                      </div>
-                      {(post.dance_style || post.size) && (
-                        <div className="wanted-post-tags">
-                          {post.dance_style && <span className="tag tag-style">{post.dance_style}</span>}
-                          {post.size && <span className="tag tag-size">{post.size}</span>}
-                        </div>
+                      {editingWanted?.id === post.id ? (
+                        <>
+                          <div className="form-group"><input className="form-input" value={editingWanted.title} onChange={e=>setEditingWanted(f=>({...f,title:e.target.value}))} placeholder="What are you looking for?"/></div>
+                          <div className="form-row" style={{marginBottom:".5rem"}}>
+                            <select className="form-select" value={editingWanted.style} onChange={e=>setEditingWanted(f=>({...f,style:e.target.value}))}>
+                              <option value="">Any dance style</option>
+                              {danceStyles.map(s=><option key={s} value={s}>{s}</option>)}
+                            </select>
+                            <select className="form-select" value={editingWanted.size} onChange={e=>setEditingWanted(f=>({...f,size:e.target.value}))}>
+                              <option value="">Any size</option>
+                              {sizes.map(s=><option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </div>
+                          <div className="form-group" style={{marginBottom:".5rem"}}><textarea className="form-textarea" style={{minHeight:48}} value={editingWanted.description} onChange={e=>setEditingWanted(f=>({...f,description:e.target.value}))} placeholder="Extra details..."/></div>
+                          <div style={{display:"flex",gap:".5rem"}}>
+                            <button className="btn btn-primary btn-sm" onClick={() => handleUpdateWanted(post.id)}>Save</button>
+                            <button className="btn btn-ghost btn-sm" onClick={() => setEditingWanted(null)}>Cancel</button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:".5rem"}}>
+                            <div className="wanted-post-title">{post.title}</div>
+                            {post.fulfilled && <span className="wanted-fulfilled-badge">✓ Found</span>}
+                          </div>
+                          {(post.dance_style || post.size) && (
+                            <div className="wanted-post-tags">
+                              {post.dance_style && <span className="tag tag-style">{post.dance_style}</span>}
+                              {post.size && <span className="tag tag-size">{post.size}</span>}
+                            </div>
+                          )}
+                          {post.description && <div className="wanted-post-desc">{post.description}</div>}
+                          <div className="wanted-post-meta">
+                            <span style={{color:sc}}>{post.user_name}</span>
+                            <span>{new Date(post.created_at).toLocaleDateString("en-GB")}</span>
+                            {post.school_id && <span>🏫 {schools.find(s=>s.id===post.school_id)?.name}</span>}
+                            {user?.email === post.user_email && !post.fulfilled && (
+                              <button style={{background:"none",border:"none",color:P.accent,cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif"}} onClick={() => setEditingWanted({id:post.id,title:post.title,style:post.dance_style||"",size:post.size||"",description:post.description||""})}>Edit</button>
+                            )}
+                            {user?.email === post.user_email && !post.fulfilled && (
+                              <button style={{background:"none",border:"none",color:P.success,cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif"}} onClick={() => handleFulfillWanted(post.id, post.fulfilled)}>✓ Mark as found</button>
+                            )}
+                            {user?.email === post.user_email && post.fulfilled && (
+                              <button style={{background:"none",border:"none",color:P.muted,cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif"}} onClick={() => handleFulfillWanted(post.id, post.fulfilled)}>Reopen</button>
+                            )}
+                            {(user?.email === post.user_email || isAdmin) && (
+                              <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif"}} onClick={() => handleDeleteWanted(post.id)}>Remove</button>
+                            )}
+                          </div>
+                        </>
                       )}
-                      {post.description && <div className="wanted-post-desc">{post.description}</div>}
-                      <div className="wanted-post-meta">
-                        <span style={{color:sc}}>{post.user_name}</span>
-                        <span>{new Date(post.created_at).toLocaleDateString("en-GB")}</span>
-                        {post.school_id && <span>🏫 {schools.find(s=>s.id===post.school_id)?.name}</span>}
-                        {user?.email === post.user_email && !post.fulfilled && (
-                          <button style={{background:"none",border:"none",color:P.success,cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif"}} onClick={() => handleFulfillWanted(post.id, post.fulfilled)}>✓ Mark as found</button>
-                        )}
-                        {user?.email === post.user_email && post.fulfilled && (
-                          <button style={{background:"none",border:"none",color:P.muted,cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif"}} onClick={() => handleFulfillWanted(post.id, post.fulfilled)}>Reopen</button>
-                        )}
-                        {(user?.email === post.user_email || isAdmin) && (
-                          <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif"}} onClick={() => handleDeleteWanted(post.id)}>Remove</button>
-                        )}
-                      </div>
                     </div>
                   );
                 })}
