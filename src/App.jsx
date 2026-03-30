@@ -384,259 +384,62 @@ function PixieDust() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
-    resize();
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 
-    // ── LOGO SPARKLES (continuous, from top-left) ──
-    const originX = 48, originY = 36;
-    const maxY = canvas.height * 0.42;
-    const makeLogoParticle = () => ({
-      x: originX + (Math.random() * 30 - 10),
+    const originX = 48;
+    const originY = 36;
+
+    const particles = Array.from({ length: 120 }, (_, i) => ({
+      x: originX + (Math.random() * 20 - 10),
       y: originY + (Math.random() * 20 - 10),
-      vx: Math.random() * 3.5 + 0.8, vy: Math.random() * 1.8 - 0.3,
-      ax: -0.015, ay: 0.04,
-      size: Math.random() * 2.8 + 0.8,
-      opacity: Math.random() * 0.7 + 0.3,
-      fade: Math.random() * 0.008 + 0.004,
+      vx: Math.random() * 4.5 + 0.5,
+      vy: Math.random() * 2.5 - 0.5,
+      ax: -0.02,
+      ay: 0.045,
+      size: Math.random() * 3 + 0.8,
+      opacity: Math.random() * 0.6 + 0.4,
+      fade: Math.random() * 0.006 + 0.003,
       hue: Math.random() * 25 + 38,
-      delay: Math.random() * 120,
-      type: "logo",
-    });
-    const logoParticles = Array.from({ length: 80 }, makeLogoParticle);
+      delay: i * 1.2,
+    }));
 
-    // ── CLICK BURST PARTICLES ──
-    const clickParticles = [];
-    const addClickBurst = (x, y) => {
-      for (let i = 0; i < 28; i++) {
-        const angle = (Math.PI * 2 * i) / 28 + Math.random() * 0.3;
-        const speed = Math.random() * 5 + 2;
-        clickParticles.push({
-          x, y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          size: Math.random() * 3 + 1,
-          opacity: 1,
-          fade: Math.random() * 0.03 + 0.02,
-          hue: Math.random() * 40 + 30,
-          ay: 0.08,
-        });
-      }
-    };
+    let raf;
+    let allDone = false;
 
-    // ── FAIRY ──
-    const fairy = {
-      x: 100, y: 100,
-      tx: 200, ty: 200,
-      speed: 1.5,
-      angle: 0,
-      wingFlap: 0,
-      state: "flying", // flying, hovering, spinning
-      stateTimer: 0,
-      spinAngle: 0,
-      trail: [],
-    };
-    const newFairyTarget = () => {
-      const margin = 80;
-      const side = Math.floor(Math.random() * 4);
-      if (side === 0) return { x: Math.random() * (canvas.width - margin*2) + margin, y: margin };
-      if (side === 1) return { x: canvas.width - margin, y: Math.random() * (canvas.height - margin*2) + margin };
-      if (side === 2) return { x: Math.random() * (canvas.width - margin*2) + margin, y: canvas.height - margin };
-      return { x: margin, y: Math.random() * (canvas.height - margin*2) + margin };
-    };
-    Object.assign(fairy, newFairyTarget());
-    fairy.tx = fairy.x; fairy.ty = fairy.y;
-
-    const drawFairy = (x, y, wingFlap, spinAngle, opacity) => {
-      ctx.save();
-      ctx.globalAlpha = opacity;
-      ctx.translate(x, y);
-      if (spinAngle) ctx.rotate(spinAngle);
-
-      // Glow aura
-      const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, 22);
-      grd.addColorStop(0, "rgba(255,220,100,0.18)");
-      grd.addColorStop(1, "rgba(255,220,100,0)");
-      ctx.beginPath(); ctx.arc(0, 0, 22, 0, Math.PI*2);
-      ctx.fillStyle = grd; ctx.fill();
-
-      // Wings
-      const wf = Math.sin(wingFlap) * 0.4;
-      ctx.save();
-      ctx.globalAlpha = opacity * 0.55;
-      // Left wing
-      ctx.beginPath();
-      ctx.ellipse(-9, -2, 11, 7, -0.5 + wf, 0, Math.PI*2);
-      const wg1 = ctx.createRadialGradient(-9, -2, 0, -9, -2, 11);
-      wg1.addColorStop(0, "rgba(200,230,255,0.9)");
-      wg1.addColorStop(1, "rgba(150,200,255,0.2)");
-      ctx.fillStyle = wg1; ctx.fill();
-      // Right wing
-      ctx.beginPath();
-      ctx.ellipse(9, -2, 11, 7, 0.5 - wf, 0, Math.PI*2);
-      const wg2 = ctx.createRadialGradient(9, -2, 0, 9, -2, 11);
-      wg2.addColorStop(0, "rgba(200,230,255,0.9)");
-      wg2.addColorStop(1, "rgba(150,200,255,0.2)");
-      ctx.fillStyle = wg2; ctx.fill();
-      ctx.restore();
-
-      // Body
-      ctx.beginPath();
-      ctx.ellipse(0, 2, 3.5, 6, 0, 0, Math.PI*2);
-      ctx.fillStyle = "#f9c4d2"; ctx.fill();
-
-      // Head
-      ctx.beginPath();
-      ctx.arc(0, -6, 4.5, 0, Math.PI*2);
-      ctx.fillStyle = "#fde8d0"; ctx.fill();
-
-      // Hair
-      ctx.beginPath();
-      ctx.arc(0, -8.5, 4, Math.PI, Math.PI*2);
-      ctx.fillStyle = "#c9a96e"; ctx.fill();
-
-      // Eyes
-      ctx.fillStyle = "#5a3e2b";
-      ctx.beginPath(); ctx.arc(-1.5, -6, 0.9, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(1.5, -6, 0.9, 0, Math.PI*2); ctx.fill();
-
-      // Wand
-      ctx.strokeStyle = "#c9a96e"; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(14, -10); ctx.stroke();
-      // Wand star
-      ctx.fillStyle = "#ffe066";
-      ctx.shadowBlur = 8; ctx.shadowColor = "#ffe066";
-      ctx.beginPath();
-      for (let i = 0; i < 5; i++) {
-        const a = (i * 4 * Math.PI) / 5 - Math.PI/2;
-        const r = i%2===0 ? 3.5 : 1.5;
-        i===0 ? ctx.moveTo(14+r*Math.cos(a), -10+r*Math.sin(a))
-              : ctx.lineTo(14+r*Math.cos(a), -10+r*Math.sin(a));
-      }
-      ctx.closePath(); ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.restore();
-    };
-
-    const drawStar = (x, y, size, hue, alpha) => {
-      ctx.save();
-      ctx.globalAlpha = Math.max(0, alpha);
-      ctx.fillStyle = `hsl(${hue}, 90%, 68%)`;
-      ctx.shadowBlur = 5; ctx.shadowColor = `hsl(${hue}, 100%, 78%)`;
-      ctx.beginPath();
-      for (let j = 0; j < 10; j++) {
-        const angle = (j * Math.PI) / 5 - Math.PI/2;
-        const r = j%2===0 ? size : size*0.45;
-        j===0 ? ctx.moveTo(x+r*Math.cos(angle), y+r*Math.sin(angle))
-              : ctx.lineTo(x+r*Math.cos(angle), y+r*Math.sin(angle));
-      }
-      ctx.closePath(); ctx.fill();
-      ctx.shadowBlur = 0; ctx.restore();
-    };
-
-    let raf, frame = 0;
     const draw = () => {
+      if (allDone) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      frame++;
-
-      // ── Logo particles ──
-      logoParticles.forEach(p => {
-        if (p.delay > 0) { p.delay--; return; }
-        p.vx += p.ax; p.vy += p.ay; p.x += p.vx; p.y += p.vy;
-        const proximity = Math.max(0, 1-(maxY-p.y)/(maxY*0.3));
-        const alpha = Math.max(0, p.opacity - proximity*0.8);
+      let alive = 0;
+      particles.forEach(p => {
+        if (p.delay > 0) { p.delay--; alive++; return; }
+        p.vx += p.ax; p.vy += p.ay;
+        p.x += p.vx; p.y += p.vy;
         p.opacity -= p.fade;
-        if (p.opacity <= 0 || p.x > canvas.width+20 || p.y > maxY) Object.assign(p, makeLogoParticle());
-        else drawStar(p.x, p.y, p.size, p.hue, alpha);
+        if (p.opacity <= 0) return;
+        alive++;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.opacity);
+        ctx.fillStyle = `hsl(${p.hue}, 90%, 68%)`;
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = `hsl(${p.hue}, 100%, 78%)`;
+        ctx.beginPath();
+        for (let j = 0; j < 10; j++) {
+          const angle = (j * Math.PI) / 5 - Math.PI / 2;
+          const r = j % 2 === 0 ? p.size : p.size * 0.45;
+          j === 0 ? ctx.moveTo(p.x + r * Math.cos(angle), p.y + r * Math.sin(angle))
+                  : ctx.lineTo(p.x + r * Math.cos(angle), p.y + r * Math.sin(angle));
+        }
+        ctx.closePath(); ctx.fill(); ctx.restore();
       });
-
-      // ── Click burst particles ──
-      for (let i = clickParticles.length-1; i >= 0; i--) {
-        const p = clickParticles[i];
-        p.vx *= 0.95; p.vy *= 0.95; p.vy += p.ay;
-        p.x += p.vx; p.y += p.vy; p.opacity -= p.fade;
-        if (p.opacity <= 0) { clickParticles.splice(i, 1); continue; }
-        drawStar(p.x, p.y, p.size, p.hue, p.opacity);
-      }
-
-      // ── Fairy trail ──
-      fairy.trail.push({ x: fairy.x, y: fairy.y, hue: 45, opacity: 0.6 });
-      if (fairy.trail.length > 18) fairy.trail.shift();
-      fairy.trail.forEach((t, i) => {
-        const alpha = (i / fairy.trail.length) * t.opacity * 0.5;
-        const size = (i / fairy.trail.length) * 1.8;
-        drawStar(t.x, t.y, size, t.hue, alpha);
-      });
-
-      // ── Fairy movement ──
-      fairy.wingFlap += 0.28;
-      if (fairy.state === "flying") {
-        const dx = fairy.tx - fairy.x, dy = fairy.ty - fairy.y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        if (dist < 8) {
-          fairy.state = "hovering";
-          fairy.stateTimer = 80 + Math.random()*80;
-        } else {
-          fairy.x += (dx/dist) * fairy.speed;
-          fairy.y += (dy/dist) * fairy.speed;
-          fairy.x += Math.sin(frame*0.04)*1.2;
-          fairy.y += Math.cos(frame*0.03)*1.2;
-          fairy.angle = Math.atan2(dy, dx);
-        }
-      } else if (fairy.state === "hovering") {
-        fairy.y += Math.sin(frame*0.05)*0.5;
-        fairy.stateTimer--;
-        // Occasional wand sparkle while hovering
-        if (frame % 18 === 0) {
-          const wx = fairy.x + 14*Math.cos(fairy.angle-0.5);
-          const wy = fairy.y + 14*Math.sin(fairy.angle-0.5) - 10;
-          clickParticles.push({ x:wx, y:wy, vx:(Math.random()-0.5)*2, vy:-Math.random()*2, size:1.5, opacity:0.8, fade:0.04, hue:45, ay:0.05 });
-        }
-        if (fairy.stateTimer <= 0) {
-          const t = newFairyTarget();
-          fairy.tx = t.x; fairy.ty = t.y;
-          fairy.state = "flying";
-        }
-      } else if (fairy.state === "spinning") {
-        fairy.spinAngle += 0.3;
-        fairy.stateTimer--;
-        // Burst sparkles while spinning
-        if (frame % 4 === 0) {
-          const angle = Math.random()*Math.PI*2;
-          clickParticles.push({ x:fairy.x+Math.cos(angle)*15, y:fairy.y+Math.sin(angle)*15, vx:Math.cos(angle)*2, vy:Math.sin(angle)*2, size:2, opacity:1, fade:0.04, hue:Math.random()*40+30, ay:0.03 });
-        }
-        if (fairy.stateTimer <= 0) {
-          fairy.state = "flying"; fairy.spinAngle = 0;
-          const t = newFairyTarget(); fairy.tx = t.x; fairy.ty = t.y;
-        }
-      }
-
-      drawFairy(fairy.x, fairy.y, fairy.wingFlap, fairy.spinAngle, 0.92);
+      if (alive === 0) { allDone = true; ctx.clearRect(0, 0, canvas.width, canvas.height); return; }
       raf = requestAnimationFrame(draw);
     };
     draw();
-
-    // Click handler — burst + fairy spin
-    const handleClick = (e) => {
-      addClickBurst(e.clientX, e.clientY);
-      if (fairy.state !== "spinning") {
-        fairy.x = e.clientX + (Math.random()*60-30);
-        fairy.y = e.clientY + (Math.random()*60-30);
-        fairy.state = "spinning";
-        fairy.stateTimer = 40;
-      }
-    };
-
-    window.addEventListener("click", handleClick);
-    window.addEventListener("resize", resize);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("click", handleClick);
-      window.removeEventListener("resize", resize);
-    };
+    return () => cancelAnimationFrame(raf);
   }, []);
   return <canvas ref={canvasRef} className="pixie-canvas"/>;
 }
-
 function AdBanner({ ad }) {
   if (!ad || !ad.active) return null;
   const href = ad.url.startsWith("http") ? ad.url : `https://${ad.url}`;
