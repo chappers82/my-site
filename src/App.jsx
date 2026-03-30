@@ -375,6 +375,20 @@ function getCSS(P) { return `
   .wanted-fulfilled-badge{padding:.18rem .55rem;border-radius:20px;font-size:.62rem;font-weight:500;letter-spacing:.05em;text-transform:uppercase;background:rgba(111,207,151,.15);color:${P.success};border:1px solid rgba(111,207,151,.3)}
   .theme-toggle{background:transparent;border:1px solid ${P.border};color:${P.muted};border-radius:6px;padding:.4rem .7rem;cursor:pointer;font-size:.88rem;transition:all .2s;line-height:1}
   .theme-toggle:hover{border-color:${P.accent};color:${P.accent}}
+  .notif-btn{position:relative;background:transparent;border:1px solid ${P.border};color:${P.muted};border-radius:6px;padding:.4rem .65rem;cursor:pointer;font-size:.95rem;transition:all .2s;line-height:1}
+  .notif-btn:hover,.notif-btn.open{border-color:${P.accent};color:${P.accent}}
+  .notif-badge{position:absolute;top:-.3rem;right:-.3rem;background:#e07070;color:white;border-radius:50%;min-width:16px;height:16px;font-size:.58rem;display:flex;align-items:center;justify-content:center;font-weight:700;padding:0 .2rem;line-height:1}
+  .notif-panel{position:fixed;top:4.2rem;right:1rem;width:320px;max-height:72vh;overflow-y:auto;background:${P.surface};border:1px solid ${P.border};border-radius:12px;z-index:150;box-shadow:0 8px 32px rgba(0,0,0,.45);animation:slideUp .2s ease}
+  @media(max-width:400px){.notif-panel{right:.5rem;left:.5rem;width:auto}}
+  .notif-panel-header{padding:.75rem 1rem;border-bottom:1px solid ${P.border};display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:${P.surface};z-index:1}
+  .notif-panel-title{font-size:.78rem;font-weight:500;color:${P.text};text-transform:uppercase;letter-spacing:.08em}
+  .notif-item{padding:.7rem 1rem;border-bottom:1px solid rgba(61,47,92,.4);cursor:pointer;transition:background .15s;border-left:3px solid transparent}
+  .notif-item:hover{background:${P.card}}
+  .notif-item.unread{border-left-color:${P.accent};background:rgba(201,169,110,.04)}
+  .notif-item-title{font-size:.8rem;font-weight:500;color:${P.text};margin-bottom:.15rem}
+  .notif-item-body{font-size:.74rem;color:${P.muted};line-height:1.4}
+  .notif-item-time{font-size:.65rem;color:${P.muted};margin-top:.25rem;opacity:.75}
+  .notif-empty{padding:2rem 1rem;text-align:center;color:${P.muted};font-size:.82rem}
 
   /* PIXIE DUST */
   .pixie-canvas{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;}
@@ -706,6 +720,8 @@ export default function TutuTrade() {
   const [wantedSchoolId, setWantedSchoolId] = useState("general");
   const [editingWanted, setEditingWanted] = useState(null);
   const [editingBoardPost, setEditingBoardPost] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -730,6 +746,19 @@ export default function TutuTrade() {
   }, []);
 
   useEffect(() => { if (isAdmin) { loadAllUserSchools(); loadAllUsers(); } }, [isAdmin]);
+  useEffect(() => {
+    if (!user) { setNotifications([]); return; }
+    const loadNotifications = async () => {
+      const { data } = await supabase.from("notifications").select("*").eq("user_email", user.email).order("created_at", { ascending: false }).limit(60);
+      if (data) setNotifications(data);
+    };
+    loadNotifications();
+    const channel = supabase.channel("user-notifications")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_email=eq.${user.email}` },
+        payload => setNotifications(n => [payload.new, ...n]))
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [user]);
   useEffect(() => {
     if (userSchools.length > 0) {
       setBoardSchoolId(s => s === "general" ? userSchools[0].school_id : s);
@@ -977,6 +1006,8 @@ export default function TutuTrade() {
     }]);
     if (error) return setCreateError("Failed to create listing. Please try again.");
     await loadListings();
+    const { data: newListings } = await supabase.from("listings").select("*").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
+    if (newListings?.[0]) await checkWishlistMatches(newListings[0]);
     setCreateForm({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolId:"" });
     closeModal(); setSuccess("Your listing is now live!");
   };
@@ -986,7 +1017,10 @@ export default function TutuTrade() {
     await supabase.from("listings").update({ sold: true, sold_at: new Date().toISOString() }).eq("id", id);
     const listing = listings.find(l => l.id === id);
     const effectivePct = getCommission(listing?.school_id);
-    if (listing) await sendSoldEmail({ listing, commissionPct: effectivePct });
+    if (listing) {
+      await sendSoldEmail({ listing, commissionPct: effectivePct });
+      await pushNotification(listing.seller_email, "item_sold", "🎉 Your item sold!", `"${listing.title}" has been marked as sold for £${listing.price}`, listing.id);
+    }
     await loadListings(); closeModal(); setSuccess("Item marked as sold! Payout email sent to your inbox.");
   };
   const handleMarkUnsold = async (id) => {
@@ -1127,8 +1161,8 @@ export default function TutuTrade() {
     await loadComments(selectedListing.id);
     setCommentText("");
     await loadCommentCounts();
-    // Email seller if they're not the one commenting
     if (selectedListing.seller_email !== user.email) {
+      await pushNotification(selectedListing.seller_email, "new_comment", "💬 New question on your listing", `${userName}: "${commentText.trim()}"`, selectedListing.id);
       await sendResendEmail({
         to: selectedListing.seller_email,
         subject: `💬 New question on your listing — ${selectedListing.title}`,
@@ -1161,7 +1195,9 @@ export default function TutuTrade() {
     await loadComments(selectedListing.id);
     setCommentReplyText("");
     setReplyingTo(null);
-    // Email the original commenter if someone else replied
+    if (originalComment && originalComment.user_email !== user.email) {
+      await pushNotification(originalComment.user_email, "comment_reply", "↩ Reply to your question", `${userName}: "${commentReplyText.trim()}"`, selectedListing.id);
+    }
     if (originalComment && originalComment.user_email !== user.email) {
       await sendResendEmail({
         to: originalComment.user_email,
@@ -1283,6 +1319,47 @@ export default function TutuTrade() {
     setEditingBoardPost(null);
   };
 
+  // ── NOTIFICATIONS ──
+  const pushNotification = async (userEmail, type, title, body, listingId = null) => {
+    if (!userEmail || userEmail === user?.email) return;
+    await supabase.from("notifications").insert([{ user_email: userEmail, type, title, body, listing_id: listingId }]);
+  };
+
+  const checkWishlistMatches = async (listing) => {
+    const { data: wanted } = await supabase.from("wanted_posts").select("*").eq("fulfilled", false);
+    if (!wanted) return;
+    for (const w of wanted) {
+      if (w.user_email === listing.seller_email) continue;
+      const schoolOk = !w.school_id || !listing.school_id || w.school_id === listing.school_id;
+      const styleOk = !w.dance_style || w.dance_style === listing.style;
+      const sizeOk = !w.size || w.size === listing.size;
+      if (schoolOk && styleOk && sizeOk) {
+        await pushNotification(w.user_email, "wishlist_match", "🔍 Wishlist match!", `"${listing.title}" — ${[listing.style, listing.size].filter(Boolean).join(", ")} — £${listing.price}`, listing.id);
+      }
+    }
+  };
+
+  const markNotificationRead = async (id) => {
+    setNotifications(n => n.map(x => x.id === id ? { ...x, read: true } : x));
+    await supabase.from("notifications").update({ read: true }).eq("id", id);
+  };
+
+  const markAllNotificationsRead = async () => {
+    const ids = notifications.filter(n => !n.read).map(n => n.id);
+    if (!ids.length) return;
+    setNotifications(n => n.map(x => ({ ...x, read: true })));
+    await supabase.from("notifications").update({ read: true }).in("id", ids);
+  };
+
+  const handleNotificationClick = async (notif) => {
+    await markNotificationRead(notif.id);
+    setShowNotifications(false);
+    if (notif.listing_id) {
+      const listing = listings.find(l => l.id === notif.listing_id);
+      if (listing) { setSelectedListing(listing); setModal("detail"); loadComments(listing.id); setCommentText(""); setView("browse"); }
+    }
+  };
+
   const handleAdminResetPassword = async (email) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${SITE_URL}/reset` });
     if (error) setSuccess(`Error: ${error.message}`);
@@ -1354,6 +1431,12 @@ export default function TutuTrade() {
         </div>
         <div className="header-actions">
           <button className="theme-toggle" onClick={() => setDarkMode(d => !d)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>{darkMode ? "☀" : "🌙"}</button>
+          {user && (() => { const unread = notifications.filter(n=>!n.read).length; return (
+            <button className={`notif-btn ${showNotifications?"open":""}`} onClick={() => setShowNotifications(s=>!s)} title="Notifications">
+              🧚
+              {unread > 0 && <span className="notif-badge">{unread > 9 ? "9+" : unread}</span>}
+            </button>
+          ); })()}
           {isAdmin && <button className="btn btn-admin btn-sm" onClick={() => setView("admin")}>⚙ Admin</button>}
           {user ? (
             <>
@@ -2332,6 +2415,33 @@ export default function TutuTrade() {
           </>
         )}
       </div>
+
+      {/* NOTIFICATION PANEL */}
+      {showNotifications && (
+        <>
+          <div style={{position:"fixed",inset:0,zIndex:149}} onClick={() => setShowNotifications(false)}/>
+          <div className="notif-panel">
+            <div className="notif-panel-header">
+              <span className="notif-panel-title">🧚 Fairy Notifications</span>
+              <div style={{display:"flex",gap:".5rem",alignItems:"center"}}>
+                {notifications.some(n=>!n.read) && <button className="text-link" style={{fontSize:".7rem"}} onClick={markAllNotificationsRead}>Mark all read</button>}
+                <button style={{background:"none",border:"none",color:P.muted,cursor:"pointer",fontSize:"1.1rem",lineHeight:1}} onClick={() => setShowNotifications(false)}>×</button>
+              </div>
+            </div>
+            {notifications.length === 0 ? (
+              <div className="notif-empty">No notifications yet — your fairy is watching! 🧚</div>
+            ) : (
+              notifications.map(n => (
+                <div key={n.id} className={`notif-item ${n.read?"":"unread"}`} onClick={() => handleNotificationClick(n)}>
+                  <div className="notif-item-title">{n.title}</div>
+                  {n.body && <div className="notif-item-body">{n.body}</div>}
+                  <div className="notif-item-time">{new Date(n.created_at).toLocaleDateString("en-GB")} {new Date(n.created_at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
 
       {/* AUTH MODAL */}
       {modal === "auth" && (

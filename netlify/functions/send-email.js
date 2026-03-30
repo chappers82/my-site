@@ -3,6 +3,12 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: "Method not allowed" };
   }
 
+  const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY;
+  if (!apiKey) {
+    console.error("RESEND_API_KEY is not set");
+    return { statusCode: 500, body: JSON.stringify({ error: "Email service not configured" }) };
+  }
+
   try {
     const { to, subject, html } = JSON.parse(event.body);
 
@@ -10,7 +16,7 @@ exports.handler = async (event) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.VITE_RESEND_API_KEY}`,
+        "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         from: "TutuTrade <hello@tututrade.co.uk>",
@@ -22,14 +28,14 @@ exports.handler = async (event) => {
 
     const data = await response.json();
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify(data),
-    };
+    if (!response.ok) {
+      console.error("Resend error:", data);
+      return { statusCode: response.status, body: JSON.stringify(data) };
+    }
+
+    return { statusCode: 200, body: JSON.stringify(data) };
   } catch (error) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message }),
-    };
+    console.error("Email function error:", error);
+    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
   }
 };
