@@ -1904,7 +1904,7 @@ export default function TutuTrade() {
               <div className="nav-pills">
                 <button className={`nav-pill ${view==="browse"?"active":""}`} onClick={() => setView("browse")}>Browse all</button>
                 <button className={`nav-pill ${view==="mylistings"?"active":""}`} onClick={() => setView("mylistings")}>My listings</button>
-                <button className={`nav-pill ${view==="board"?"active":""}`} onClick={() => { setView("board"); loadBoardPosts(); loadBoardReplies(); }}>💬 Board</button>
+                <button className={`nav-pill ${view==="board"?"active":""}`} onClick={() => { setView("board"); loadBoardPosts(); loadBoardReplies(); setBoardSchoolId(userSchools[0]?.school_id || "general"); }}>💬 Board</button>
                 <button className={`nav-pill ${view==="wanted"?"active":""}`} onClick={() => { setView("wanted"); loadWantedPosts(); setWantedSchoolId(userSchools[0]?.school_id || "general"); }}>🔍 Wanted</button>
               </div>
             )}
