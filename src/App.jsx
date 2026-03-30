@@ -1905,7 +1905,7 @@ export default function TutuTrade() {
                 <button className={`nav-pill ${view==="browse"?"active":""}`} onClick={() => setView("browse")}>Browse all</button>
                 <button className={`nav-pill ${view==="mylistings"?"active":""}`} onClick={() => setView("mylistings")}>My listings</button>
                 <button className={`nav-pill ${view==="board"?"active":""}`} onClick={() => { setView("board"); loadBoardPosts(); loadBoardReplies(); }}>💬 Board</button>
-                <button className={`nav-pill ${view==="wanted"?"active":""}`} onClick={() => { setView("wanted"); loadWantedPosts(); }}>🔍 Wanted</button>
+                <button className={`nav-pill ${view==="wanted"?"active":""}`} onClick={() => { setView("wanted"); loadWantedPosts(); setWantedSchoolId(userSchools[0]?.school_id || "general"); }}>🔍 Wanted</button>
               </div>
             )}
 
@@ -1974,6 +1974,7 @@ export default function TutuTrade() {
               </div>
             )}
 
+            {(view === "browse" || view === "mylistings") && (<>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.1rem",flexWrap:"wrap",gap:".5rem"}}>
               <div className="listing-count">Showing <strong>{filtered.length}</strong> {filtered.length===1?"listing":"listings"}{view==="mylistings"?" — your items":""}</div>
               {view === "browse" && <button className={`show-sold-toggle ${showSold?"active":""}`} onClick={() => setShowSold(s=>!s)}>
@@ -2039,6 +2040,7 @@ export default function TutuTrade() {
                 </div>
               )}
             </div>
+            </>)}
 
             {/* ── BOARD VIEW ── */}
             {view === "board" && (
