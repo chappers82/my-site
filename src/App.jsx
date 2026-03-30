@@ -86,7 +86,7 @@ const emailTemplate = (title, body) => `
   </div>
 `;
 
-const DANCE_STYLES = ["Ballet","Jazz","Tap","Contemporary","Hip Hop","Musical Theatre","Acro","Irish","Ballroom","Lyrical"];
+const DANCE_STYLES = ["Acro","Ballet","Ballroom","Contemporary","Hip Hop","Irish","Jazz","Lyrical","Musical Theatre","Tap"];
 const SIZES = ["Age 2-3","Age 3-4","Age 4-5","Age 5-6","Age 6-7","Age 7-8","Age 8-9","Age 9-10","Age 10-11","Age 11-12","Teen XS","Teen S","Teen M","Teen L","Adult XS","Adult S","Adult M","Adult L","Adult XL"];
 const SHOE_SIZES = ["UK 6 (Infant)","UK 7 (Infant)","UK 8 (Infant)","UK 9 (Infant)","UK 10 (Infant)","UK 11 (Infant)","UK 12 (Infant)","UK 13 (Infant)","UK 1","UK 2","UK 3","UK 4","UK 5","UK 6","UK 7","UK 8","UK 9","UK 10"];
 const ITEM_TYPES = ["Clothing","Footwear","Accessories / Other"];
@@ -425,11 +425,11 @@ function PixieDust() {
     // ── ONE-TIME DUST BURST from logo ──
     const tutuDust = Array.from({length:80}, (_,tutuIdx) => ({
       tutuX: 48+(Math.random()*20-10), tutuY: 36+(Math.random()*20-10),
-      tutuVX: Math.random()*1.2+0.15, tutuVY: Math.random()*0.6-0.15,
-      tutuAX: -0.0005, tutuAY: 0.018,
+      tutuVX: Math.random()*1.4+0.2, tutuVY: Math.random()*0.6-0.15,
+      tutuAX: -0.0001, tutuAY: 0.018,
       tutuSize: Math.random()*2.5+0.8,
       tutuOpacity: Math.random()*0.6+0.4,
-      tutuFade: Math.random()*0.0008+0.0002,
+      tutuFade: Math.random()*0.0005+0.0001,
       tutuHue: Math.random()*25+38,
       tutuDelay: tutuIdx*2.5, tutuDone: false,
     }));
@@ -802,7 +802,7 @@ export default function TutuTrade() {
       supabase.from("sizes").select("*").order("sort_order"),
       supabase.from("conditions").select("*").order("sort_order"),
     ]);
-    if (ds.data?.length) setDanceStyles(ds.data.map(d => d.name));
+    if (ds.data?.length) setDanceStyles(ds.data.map(d => d.name).sort((a,b) => a.localeCompare(b)));
     if (sz.data?.length) setSizes(sz.data.map(s => s.name));
     if (cn.data?.length) setConditions(cn.data.map(c => c.name));
   };
@@ -1271,19 +1271,16 @@ export default function TutuTrade() {
   const handlePostWanted = async () => {
     if (!wantedForm.title.trim()) return;
     const schoolId = wantedSchoolId === "general" ? null : wantedSchoolId;
-    await supabase.from("wanted_posts").insert([{
-      school_id: schoolId,
-      user_email: user.email,
+    const base = {
+      school_id: schoolId, user_email: user.email,
       user_name: user.user_metadata?.full_name || user.email,
-      title: wantedForm.title.trim(),
-      dance_style: wantedForm.style || null,
-      size: wantedForm.size || null,
-      description: wantedForm.description.trim() || null,
-      images: wantedForm.images || [],
+      title: wantedForm.title.trim(), dance_style: wantedForm.style || null,
+      size: wantedForm.size || null, description: wantedForm.description.trim() || null,
       fulfilled: false,
-    }]);
-    await loadWantedPosts();
-    setWantedForm({ title:"", style:"", size:"", description:"", images:[] });
+    };
+    let { error } = await supabase.from("wanted_posts").insert([{ ...base, images: wantedForm.images || [] }]);
+    if (error) ({ error } = await supabase.from("wanted_posts").insert([base])); // retry without images if column missing
+    if (!error) { await loadWantedPosts(); setWantedForm({ title:"", style:"", size:"", description:"", images:[] }); }
   };
 
   const handleDeleteWanted = async (id) => {
@@ -1298,13 +1295,14 @@ export default function TutuTrade() {
 
   const handleUpdateWanted = async (id) => {
     if (!editingWanted?.title?.trim()) return;
-    await supabase.from("wanted_posts").update({
+    const base = {
       title: editingWanted.title.trim(),
       dance_style: editingWanted.style || null,
       size: editingWanted.size || null,
       description: editingWanted.description?.trim() || null,
-      images: editingWanted.images || [],
-    }).eq("id", id);
+    };
+    let { error } = await supabase.from("wanted_posts").update({ ...base, images: editingWanted.images || [] }).eq("id", id);
+    if (error) ({ error } = await supabase.from("wanted_posts").update(base).eq("id", id));
     await loadWantedPosts();
     setEditingWanted(null);
   };
