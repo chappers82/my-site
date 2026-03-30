@@ -560,13 +560,44 @@ function PixieDust() {
         }
       }
 
+      // ── Click burst particles ──
+      for (let i = clickParticles.length - 1; i >= 0; i--) {
+        const p = clickParticles[i];
+        p.vx *= 0.94; p.vy *= 0.94; p.vy += p.ay;
+        p.x += p.vx; p.y += p.vy; p.opacity -= p.fade;
+        if (p.opacity <= 0) { clickParticles.splice(i, 1); continue; }
+        drawStar(p.x, p.y, p.size, p.hue, p.opacity);
+      }
+
       drawFairyChar(fairy.x, fairy.y, fairy.wingFlap);
       raf = requestAnimationFrame(draw);
     };
     draw();
 
+    // ── CLICK BURSTS ──
+    const clickParticles = [];
+    const addClickBurst = (x, y) => {
+      for (let i = 0; i < 24; i++) {
+        const angle = (Math.PI * 2 * i) / 24 + Math.random() * 0.3;
+        const speed = Math.random() * 4 + 1.5;
+        clickParticles.push({
+          x, y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          size: Math.random() * 2.5 + 0.8,
+          opacity: 1,
+          fade: Math.random() * 0.025 + 0.015,
+          hue: Math.random() * 35 + 30,
+          ay: 0.06,
+        });
+      }
+    };
+
+    const handleClick = (e) => addClickBurst(e.clientX, e.clientY);
+    window.addEventListener("click", handleClick);
+
     window.addEventListener("resize", resize);
-    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); window.removeEventListener("click", handleClick); };
   }, []);
   return <canvas ref={canvasRef} className="pixie-canvas"/>;
 }
