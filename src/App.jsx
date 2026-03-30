@@ -1349,6 +1349,19 @@ export default function TutuTrade() {
     await supabase.from("notifications").update({ read: true }).in("id", ids);
   };
 
+  const deleteNotification = async (e, id) => {
+    e.stopPropagation();
+    setNotifications(n => n.filter(x => x.id !== id));
+    await supabase.from("notifications").delete().eq("id", id);
+  };
+
+  const clearAllNotifications = async () => {
+    const ids = notifications.map(n => n.id);
+    if (!ids.length) return;
+    setNotifications([]);
+    await supabase.from("notifications").delete().in("id", ids);
+  };
+
   const handleNotificationClick = async (notif) => {
     await markNotificationRead(notif.id);
     setShowNotifications(false);
@@ -2423,6 +2436,7 @@ export default function TutuTrade() {
               <span className="notif-panel-title">🧚 Fairy Notifications</span>
               <div style={{display:"flex",gap:".5rem",alignItems:"center"}}>
                 {notifications.some(n=>!n.read) && <button className="text-link" style={{fontSize:".7rem"}} onClick={markAllNotificationsRead}>Mark all read</button>}
+                {notifications.length > 0 && <button className="text-link" style={{fontSize:".7rem",color:"#e07070"}} onClick={clearAllNotifications}>Clear all</button>}
                 <button style={{background:"none",border:"none",color:P.muted,cursor:"pointer",fontSize:"1.1rem",lineHeight:1}} onClick={() => setShowNotifications(false)}>×</button>
               </div>
             </div>
@@ -2430,8 +2444,9 @@ export default function TutuTrade() {
               <div className="notif-empty">No notifications yet — your fairy is watching! 🧚</div>
             ) : (
               notifications.map(n => (
-                <div key={n.id} className={`notif-item ${n.read?"":"unread"}`} onClick={() => handleNotificationClick(n)}>
-                  <div className="notif-item-title">{n.title}</div>
+                <div key={n.id} className={`notif-item ${n.read?"":"unread"}`} onClick={() => handleNotificationClick(n)} style={{position:"relative"}}>
+                  <button style={{position:"absolute",top:".35rem",right:".35rem",background:"none",border:"none",color:P.muted,cursor:"pointer",fontSize:".85rem",lineHeight:1,padding:"0 .15rem"}} onClick={e=>deleteNotification(e,n.id)} title="Remove">×</button>
+                  <div className="notif-item-title" style={{paddingRight:"1rem"}}>{n.title}</div>
                   {n.body && <div className="notif-item-body">{n.body}</div>}
                   <div className="notif-item-time">{new Date(n.created_at).toLocaleDateString("en-GB")} {new Date(n.created_at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</div>
                 </div>
