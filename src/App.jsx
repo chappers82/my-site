@@ -2030,8 +2030,8 @@ export default function TutuTrade() {
               <div className="nav-pills">
                 <button className={`nav-pill ${view==="browse"?"active":""}`} onClick={() => setView("browse")}>Browse all</button>
                 <button className={`nav-pill ${view==="mylistings"?"active":""}`} onClick={() => setView("mylistings")}>My listings</button>
-                <button className={`nav-pill ${view==="board"?"active":""}`} onClick={() => { setView("board"); loadBoardPosts(); loadBoardReplies(); setBoardSchoolId(userSchools[0]?.school_id || "general"); }}>💬 Board</button>
-                <button className={`nav-pill ${view==="wanted"?"active":""}`} onClick={() => { setView("wanted"); loadWantedPosts(); setWantedSchoolId(userSchools[0]?.school_id || "general"); }}>🔍 Wanted</button>
+                <button className={`nav-pill ${view==="board"?"active":""}`} onClick={() => { setView("board"); loadBoardPosts(); loadBoardReplies(); setBoardSchoolId(userSchools[0]?.school_id || "general"); }}>💬 Board{boardPosts.length > 0 && <span style={{marginLeft:".4rem",background:P.accent,color:"#fff",borderRadius:10,fontSize:".65rem",padding:"1px 6px",fontWeight:700,verticalAlign:"middle"}}>{boardPosts.length}</span>}</button>
+                <button className={`nav-pill ${view==="wanted"?"active":""}`} onClick={() => { setView("wanted"); loadWantedPosts(); setWantedSchoolId(userSchools[0]?.school_id || "general"); }}>🔍 Wanted{wantedPosts.filter(p=>!p.fulfilled).length > 0 && <span style={{marginLeft:".4rem",background:P.accent,color:"#fff",borderRadius:10,fontSize:".65rem",padding:"1px 6px",fontWeight:700,verticalAlign:"middle"}}>{wantedPosts.filter(p=>!p.fulfilled).length}</span>}</button>
               </div>
             )}
 
