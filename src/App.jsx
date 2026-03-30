@@ -122,6 +122,7 @@ const hexToRgba = (hex, alpha) => {
 function getCSS(P) { return `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
+  html,body{overflow-x:hidden;max-width:100%}
   body{background:${P.bg};color:${P.text};font-family:'Jost',sans-serif;min-height:100vh}
   .app{min-height:100vh;background:radial-gradient(ellipse at 20% 0%,${P.gradA} 0%,${P.bg} 55%),radial-gradient(ellipse at 80% 100%,${P.gradB} 0%,transparent 55%)}
   .header{padding:1.25rem 2rem;border-bottom:1px solid ${P.border};display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;background:${P.headerBg};backdrop-filter:blur(16px)}
