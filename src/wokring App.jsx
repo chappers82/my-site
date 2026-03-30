@@ -381,163 +381,54 @@ function getCSS() { return `
 `; }
 
 function PixieDust() {
-  const tutuCanvasRef = useRef(null);
+  const canvasRef = useRef(null);
   useEffect(() => {
-    const tutuCanvas = tutuCanvasRef.current;
-    if (!tutuCanvas) return;
-    const tutuCtx = tutuCanvas.getContext('2d');
-    const tutuResize = () => { tutuCanvas.width = window.innerWidth; tutuCanvas.height = window.innerHeight; };
-    tutuResize();
-
-    // ── ONE-TIME DUST BURST from logo ──
-    const tutuDust = Array.from({length:80}, (_,tutuIdx) => ({
-      tutuX: 48+(Math.random()*20-10), tutuY: 36+(Math.random()*20-10),
-      tutuVX: Math.random()*1.5+0.2, tutuVY: Math.random()*1.0-0.2,
-      tutuAX: -0.008, tutuAY: 0.025,
-      tutuSize: Math.random()*2.5+0.8,
-      tutuOpacity: Math.random()*0.6+0.4,
-      tutuFade: Math.random()*0.002+0.001,
-      tutuHue: Math.random()*25+38,
-      tutuDelay: tutuIdx*2.5, tutuDone: false,
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ox = 48, oy = 36;
+    const stars = Array.from({length:80}, (_,i) => ({
+      x:ox+(Math.random()*20-10), y:oy+(Math.random()*20-10),
+      vx:Math.random()*2.5+0.3, vy:Math.random()*1.5-0.3,
+      ax:-0.008, ay:0.025,
+      size:Math.random()*2.5+0.8,
+      opacity:Math.random()*0.6+0.4,
+      fade:Math.random()*0.004+0.002,
+      hue:Math.random()*25+38,
+      delay:i*2.5, done:false,
     }));
-    let tutuBurstDone = false;
-
-    // ── CLICK BURST ──
-    const tutuBursts = [];
-    const tutuAddBurst = (tutuBX, tutuBY) => {
-      for (let tutuBI=0; tutuBI<24; tutuBI++) {
-        const tutuAngle = (Math.PI*2*tutuBI)/24 + Math.random()*0.3;
-        const tutuSpd = Math.random()*4+1.5;
-        tutuBursts.push({
-          tutuX: tutuBX, tutuY: tutuBY,
-          tutuVX: Math.cos(tutuAngle)*tutuSpd, tutuVY: Math.sin(tutuAngle)*tutuSpd,
-          tutuSize: Math.random()*2.5+0.8,
-          tutuOpacity: 1, tutuFade: Math.random()*0.025+0.015,
-          tutuHue: Math.random()*35+30, tutuAY: 0.06,
-        });
-      }
-    };
-
-    // ── FAIRY ──
-    const tutuFairy = {
-      tutuX: 60, tutuY: 60, tutuTX: 200, tutuTY: 200,
-      tutuWing: 0, tutuWobble: 0, tutuTrail: [],
-      tutuState: "flying", tutuTimer: 0,
-    };
-    const tutuNewTarget = () => {
-      const tutuM = 80, tutuSide = Math.floor(Math.random()*4);
-      if (tutuSide===0) return {tutuX:tutuM+Math.random()*(tutuCanvas.width-tutuM*2), tutuY:tutuM};
-      if (tutuSide===1) return {tutuX:tutuCanvas.width-tutuM, tutuY:tutuM+Math.random()*(tutuCanvas.height-tutuM*2)};
-      if (tutuSide===2) return {tutuX:tutuM+Math.random()*(tutuCanvas.width-tutuM*2), tutuY:tutuCanvas.height-tutuM};
-      return {tutuX:tutuM, tutuY:tutuM+Math.random()*(tutuCanvas.height-tutuM*2)};
-    };
-    const tutuT0 = tutuNewTarget(); tutuFairy.tutuTX = tutuT0.tutuX; tutuFairy.tutuTY = tutuT0.tutuY;
-
-    const tutuDrawStar = (tutuSX, tutuSY, tutuSZ, tutuSH, tutuSA) => {
-      if (tutuSA<=0) return;
-      tutuCtx.save();
-      tutuCtx.globalAlpha = Math.min(1,tutuSA);
-      tutuCtx.fillStyle = `hsl(${tutuSH},90%,68%)`;
-      tutuCtx.shadowBlur = 4; tutuCtx.shadowColor = `hsl(${tutuSH},100%,78%)`;
-      tutuCtx.beginPath();
-      for (let tutuSJ=0;tutuSJ<10;tutuSJ++) {
-        const tutuSA2=(tutuSJ*Math.PI)/5-Math.PI/2, tutuSR=tutuSJ%2===0?tutuSZ:tutuSZ*0.4;
-        tutuSJ===0?tutuCtx.moveTo(tutuSX+tutuSR*Math.cos(tutuSA2),tutuSY+tutuSR*Math.sin(tutuSA2)):tutuCtx.lineTo(tutuSX+tutuSR*Math.cos(tutuSA2),tutuSY+tutuSR*Math.sin(tutuSA2));
-      }
-      tutuCtx.closePath(); tutuCtx.fill(); tutuCtx.shadowBlur=0; tutuCtx.restore();
-    };
-
-    const tutuDrawFairy = (tutuFX, tutuFY, tutuFW) => {
-      tutuCtx.save(); tutuCtx.translate(tutuFX, tutuFY);
-      try {
-        const tutuFG = tutuCtx.createRadialGradient(0,0,0,0,0,20);
-        tutuFG.addColorStop(0,"rgba(255,220,100,0.15)"); tutuFG.addColorStop(1,"rgba(255,220,100,0)");
-        tutuCtx.beginPath(); tutuCtx.arc(0,0,20,0,Math.PI*2); tutuCtx.fillStyle=tutuFG; tutuCtx.fill();
-      } catch(tutuE){}
-      const tutuWF = Math.sin(tutuFW)*0.35;
-      tutuCtx.globalAlpha=0.5;
-      tutuCtx.beginPath(); tutuCtx.ellipse(-8,-2,10,6,-0.4+tutuWF,0,Math.PI*2); tutuCtx.fillStyle="rgba(180,220,255,0.85)"; tutuCtx.fill();
-      tutuCtx.beginPath(); tutuCtx.ellipse(8,-2,10,6,0.4-tutuWF,0,Math.PI*2); tutuCtx.fill();
-      tutuCtx.globalAlpha=1;
-      tutuCtx.beginPath(); tutuCtx.ellipse(0,2,3,5.5,0,0,Math.PI*2); tutuCtx.fillStyle="#f9c4d2"; tutuCtx.fill();
-      tutuCtx.beginPath(); tutuCtx.arc(0,-5.5,4,0,Math.PI*2); tutuCtx.fillStyle="#fde8d0"; tutuCtx.fill();
-      tutuCtx.beginPath(); tutuCtx.arc(0,-7.5,3.8,Math.PI,Math.PI*2); tutuCtx.fillStyle="#c9a96e"; tutuCtx.fill();
-      tutuCtx.fillStyle="#5a3e2b";
-      tutuCtx.beginPath(); tutuCtx.arc(-1.4,-5.5,0.8,0,Math.PI*2); tutuCtx.fill();
-      tutuCtx.beginPath(); tutuCtx.arc(1.4,-5.5,0.8,0,Math.PI*2); tutuCtx.fill();
-      tutuCtx.strokeStyle="#c9a96e"; tutuCtx.lineWidth=1.2;
-      tutuCtx.beginPath(); tutuCtx.moveTo(3.5,0); tutuCtx.lineTo(12,-9); tutuCtx.stroke();
-      tutuCtx.fillStyle="#ffe066"; tutuCtx.shadowBlur=7; tutuCtx.shadowColor="#ffe066";
-      tutuCtx.beginPath();
-      for (let tutuWI=0;tutuWI<10;tutuWI++){
-        const tutuWA=(tutuWI*Math.PI)/5-Math.PI/2, tutuWR=tutuWI%2===0?3.5:1.4;
-        tutuWI===0?tutuCtx.moveTo(12+tutuWR*Math.cos(tutuWA),-9+tutuWR*Math.sin(tutuWA)):tutuCtx.lineTo(12+tutuWR*Math.cos(tutuWA),-9+tutuWR*Math.sin(tutuWA));
-      }
-      tutuCtx.closePath(); tutuCtx.fill(); tutuCtx.shadowBlur=0; tutuCtx.restore();
-    };
-
-    let tutuRAF, tutuFrame=0;
-    const tutuDraw = () => {
-      tutuCtx.clearRect(0,0,tutuCanvas.width,tutuCanvas.height);
-      tutuFrame++;
-
-      // Dust burst
-      if (!tutuBurstDone) {
-        let tutuAlive=0;
-        tutuDust.forEach(tutuD => {
-          if (tutuD.tutuDone) return;
-          if (tutuD.tutuDelay>0) { tutuD.tutuDelay--; tutuAlive++; return; }
-          tutuD.tutuVX+=tutuD.tutuAX; tutuD.tutuVY+=tutuD.tutuAY;
-          tutuD.tutuX+=tutuD.tutuVX; tutuD.tutuY+=tutuD.tutuVY; tutuD.tutuOpacity-=tutuD.tutuFade;
-          if (tutuD.tutuOpacity<=0){tutuD.tutuDone=true;return;}
-          tutuAlive++;
-          tutuDrawStar(tutuD.tutuX,tutuD.tutuY,tutuD.tutuSize,tutuD.tutuHue,tutuD.tutuOpacity);
-        });
-        if (tutuAlive===0) tutuBurstDone=true;
-      }
-
-      // Click bursts
-      for (let tutuBI=tutuBursts.length-1;tutuBI>=0;tutuBI--){
-        const tutuB=tutuBursts[tutuBI];
-        tutuB.tutuVX*=0.94; tutuB.tutuVY*=0.94; tutuB.tutuVY+=tutuB.tutuAY;
-        tutuB.tutuX+=tutuB.tutuVX; tutuB.tutuY+=tutuB.tutuVY; tutuB.tutuOpacity-=tutuB.tutuFade;
-        if(tutuB.tutuOpacity<=0){tutuBursts.splice(tutuBI,1);continue;}
-        tutuDrawStar(tutuB.tutuX,tutuB.tutuY,tutuB.tutuSize,tutuB.tutuHue,tutuB.tutuOpacity);
-      }
-
-      // Fairy trail
-      tutuFairy.tutuTrail.push({tutuX:tutuFairy.tutuX,tutuY:tutuFairy.tutuY});
-      if(tutuFairy.tutuTrail.length>16) tutuFairy.tutuTrail.shift();
-      tutuFairy.tutuTrail.forEach((tutuTR,tutuTI)=>{
-        tutuDrawStar(tutuTR.tutuX,tutuTR.tutuY,(tutuTI/tutuFairy.tutuTrail.length)*1.6,45,(tutuTI/tutuFairy.tutuTrail.length)*0.35);
+    let raf, finished = false;
+    const draw = () => {
+      if (finished) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      let alive = 0;
+      stars.forEach(s => {
+        if (s.done) return;
+        if (s.delay > 0) { s.delay--; alive++; return; }
+        s.vx += s.ax; s.vy += s.ay; s.x += s.vx; s.y += s.vy; s.opacity -= s.fade;
+        if (s.opacity <= 0) { s.done = true; return; }
+        alive++;
+        ctx.save();
+        ctx.globalAlpha = s.opacity;
+        ctx.fillStyle = `hsl(${s.hue},90%,68%)`;
+        ctx.shadowBlur = 4; ctx.shadowColor = `hsl(${s.hue},100%,78%)`;
+        ctx.beginPath();
+        for (let j=0;j<10;j++) {
+          const a=(j*Math.PI)/5-Math.PI/2, r=j%2===0?s.size:s.size*0.4;
+          j===0?ctx.moveTo(s.x+r*Math.cos(a),s.y+r*Math.sin(a)):ctx.lineTo(s.x+r*Math.cos(a),s.y+r*Math.sin(a));
+        }
+        ctx.closePath(); ctx.fill(); ctx.shadowBlur=0; ctx.restore();
       });
-
-      // Fairy movement
-      tutuFairy.tutuWing+=0.25; tutuFairy.tutuWobble+=0.05;
-      if(tutuFairy.tutuState==="flying"){
-        const tutuDX=tutuFairy.tutuTX-tutuFairy.tutuX, tutuDY=tutuFairy.tutuTY-tutuFairy.tutuY;
-        const tutuDist=Math.sqrt(tutuDX*tutuDX+tutuDY*tutuDY);
-        if(tutuDist<10){tutuFairy.tutuState="hovering";tutuFairy.tutuTimer=100+Math.random()*100;}
-        else{tutuFairy.tutuX+=(tutuDX/tutuDist)*1.2+Math.sin(tutuFairy.tutuWobble)*0.8;tutuFairy.tutuY+=(tutuDY/tutuDist)*1.2+Math.cos(tutuFairy.tutuWobble*0.7)*0.8;}
-        if(tutuFrame%22===0) tutuDrawStar(tutuFairy.tutuX+12,tutuFairy.tutuY-9,1.2,45,0.7);
-      } else {
-        tutuFairy.tutuY+=Math.sin(tutuFairy.tutuWobble)*0.6; tutuFairy.tutuTimer--;
-        if(tutuFrame%15===0) tutuDrawStar(tutuFairy.tutuX+12+Math.random()*6-3,tutuFairy.tutuY-9+Math.random()*6-3,1.5,45,0.8);
-        if(tutuFairy.tutuTimer<=0){const tutuNT=tutuNewTarget();tutuFairy.tutuTX=tutuNT.tutuX;tutuFairy.tutuTY=tutuNT.tutuY;tutuFairy.tutuState="flying";}
-      }
-      tutuDrawFairy(tutuFairy.tutuX,tutuFairy.tutuY,tutuFairy.tutuWing);
-      tutuRAF=requestAnimationFrame(tutuDraw);
+      if (alive===0) { finished=true; ctx.clearRect(0,0,canvas.width,canvas.height); return; }
+      raf = requestAnimationFrame(draw);
     };
-    tutuDraw();
-
-    const tutuClickHandler = (tutuCE) => tutuAddBurst(tutuCE.clientX, tutuCE.clientY);
-    window.addEventListener("click", tutuClickHandler);
-    window.addEventListener("resize", tutuResize);
-    return () => { cancelAnimationFrame(tutuRAF); window.removeEventListener("click",tutuClickHandler); window.removeEventListener("resize",tutuResize); };
+    draw();
+    return () => cancelAnimationFrame(raf);
   }, []);
-  return <canvas ref={tutuCanvasRef} className="pixie-canvas"/>;
+  return <canvas ref={canvasRef} className="pixie-canvas"/>;
 }
-
 function AdBanner({ ad }) {
   if (!ad || !ad.active) return null;
   const href = ad.url.startsWith("http") ? ad.url : `https://${ad.url}`;
