@@ -468,22 +468,37 @@ function PixieDust() {
 
     const tutuDrawFairy = (tutuFX, tutuFY, tutuFW) => {
       tutuCtx.save(); tutuCtx.translate(tutuFX, tutuFY);
+      // Soft pink glow (not yellow — that's a firefly!)
       try {
-        const tutuFG = tutuCtx.createRadialGradient(0,0,0,0,0,20);
-        tutuFG.addColorStop(0,"rgba(255,220,100,0.15)"); tutuFG.addColorStop(1,"rgba(255,220,100,0)");
-        tutuCtx.beginPath(); tutuCtx.arc(0,0,20,0,Math.PI*2); tutuCtx.fillStyle=tutuFG; tutuCtx.fill();
+        const tutuFG = tutuCtx.createRadialGradient(0,0,0,0,0,16);
+        tutuFG.addColorStop(0,"rgba(255,180,220,0.13)"); tutuFG.addColorStop(1,"rgba(255,180,220,0)");
+        tutuCtx.beginPath(); tutuCtx.arc(0,0,16,0,Math.PI*2); tutuCtx.fillStyle=tutuFG; tutuCtx.fill();
       } catch(tutuE){}
-      const tutuWF = Math.sin(tutuFW)*0.35;
-      tutuCtx.globalAlpha=0.5;
-      tutuCtx.beginPath(); tutuCtx.ellipse(-8,-2,10,6,-0.4+tutuWF,0,Math.PI*2); tutuCtx.fillStyle="rgba(180,220,255,0.85)"; tutuCtx.fill();
-      tutuCtx.beginPath(); tutuCtx.ellipse(8,-2,10,6,0.4-tutuWF,0,Math.PI*2); tutuCtx.fill();
-      tutuCtx.globalAlpha=1;
-      tutuCtx.beginPath(); tutuCtx.ellipse(0,2,3,5.5,0,0,Math.PI*2); tutuCtx.fillStyle="#f9c4d2"; tutuCtx.fill();
+      const tutuWF = Math.sin(tutuFW)*0.4;
+      // 4 fairy wings — upper pair large, lower pair small
+      tutuCtx.globalAlpha=0.62;
+      tutuCtx.shadowBlur=6; tutuCtx.shadowColor="rgba(200,160,255,0.8)";
+      tutuCtx.beginPath(); tutuCtx.ellipse(-9,-5,13,5,-0.5+tutuWF,0,Math.PI*2); tutuCtx.fillStyle="rgba(230,210,255,0.78)"; tutuCtx.fill();
+      tutuCtx.beginPath(); tutuCtx.ellipse(9,-5,13,5,0.5-tutuWF,0,Math.PI*2); tutuCtx.fill();
+      tutuCtx.beginPath(); tutuCtx.ellipse(-7,2,8,3.5,0.35+tutuWF*0.4,0,Math.PI*2); tutuCtx.fillStyle="rgba(255,210,240,0.62)"; tutuCtx.fill();
+      tutuCtx.beginPath(); tutuCtx.ellipse(7,2,8,3.5,-0.35-tutuWF*0.4,0,Math.PI*2); tutuCtx.fill();
+      tutuCtx.shadowBlur=0; tutuCtx.globalAlpha=1;
+      // Tutu skirt
+      tutuCtx.beginPath(); tutuCtx.moveTo(-2.5,1); tutuCtx.lineTo(2.5,1); tutuCtx.lineTo(6.5,9); tutuCtx.lineTo(0,10); tutuCtx.lineTo(-6.5,9); tutuCtx.closePath();
+      tutuCtx.fillStyle="rgba(255,182,213,0.92)"; tutuCtx.fill();
+      tutuCtx.beginPath(); tutuCtx.moveTo(-2,2.5); tutuCtx.lineTo(2,2.5); tutuCtx.lineTo(5,7); tutuCtx.lineTo(0,8); tutuCtx.lineTo(-5,7); tutuCtx.closePath();
+      tutuCtx.fillStyle="rgba(255,225,238,0.45)"; tutuCtx.fill();
+      // Body
+      tutuCtx.beginPath(); tutuCtx.ellipse(0,2,2.5,4,0,0,Math.PI*2); tutuCtx.fillStyle="#f9c4d2"; tutuCtx.fill();
+      // Head
       tutuCtx.beginPath(); tutuCtx.arc(0,-5.5,4,0,Math.PI*2); tutuCtx.fillStyle="#fde8d0"; tutuCtx.fill();
+      // Hair
       tutuCtx.beginPath(); tutuCtx.arc(0,-7.5,3.8,Math.PI,Math.PI*2); tutuCtx.fillStyle="#c9a96e"; tutuCtx.fill();
+      // Eyes
       tutuCtx.fillStyle="#5a3e2b";
       tutuCtx.beginPath(); tutuCtx.arc(-1.4,-5.5,0.8,0,Math.PI*2); tutuCtx.fill();
       tutuCtx.beginPath(); tutuCtx.arc(1.4,-5.5,0.8,0,Math.PI*2); tutuCtx.fill();
+      // Wand
       tutuCtx.strokeStyle="#c9a96e"; tutuCtx.lineWidth=1.2;
       tutuCtx.beginPath(); tutuCtx.moveTo(3.5,0); tutuCtx.lineTo(12,-9); tutuCtx.stroke();
       tutuCtx.fillStyle="#ffe066"; tutuCtx.shadowBlur=7; tutuCtx.shadowColor="#ffe066";
