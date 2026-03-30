@@ -6,8 +6,14 @@ function getP() { return {
   bg:"#1a1228",surface:"#231934",card:"#2d2142",border:"#3d2f5c",
   accent:"#c9a96e",accentSoft:"#e8d5aa",pink:"#e8a0b4",
   text:"#f0eaf8",muted:"#a892c4",success:"#6fcf97",admin:"#9d8fe0",
+  gradA:"#2e1f52",gradB:"#251640",headerBg:"rgba(13,10,20,0.88)",
 }; }
-const P = getP();
+function getLightP() { return {
+  bg:"#faf7ff",surface:"#f0eafa",card:"#e8dff5",border:"#cdb8e8",
+  accent:"#8b5e1a",accentSoft:"#6b4510",pink:"#c2185b",
+  text:"#1a0a2e",muted:"#5e4b78",success:"#1e7e4a",admin:"#5c4db1",
+  gradA:"#d8cff0",gradB:"#f0eafa",headerBg:"rgba(250,247,255,0.92)",
+}; }
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────
 const ADMIN_EMAIL = "grant.chaplin@hotmail.com";
@@ -113,12 +119,12 @@ const hexToRgba = (hex, alpha) => {
 };
 
 
-function getCSS() { return `
+function getCSS(P) { return `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:${P.bg};color:${P.text};font-family:'Jost',sans-serif;min-height:100vh}
-  .app{min-height:100vh;background:radial-gradient(ellipse at 20% 0%,#2e1f52 0%,${P.bg} 55%),radial-gradient(ellipse at 80% 100%,#251640 0%,transparent 55%)}
-  .header{padding:1.25rem 2rem;border-bottom:1px solid ${P.border};display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;background:rgba(13,10,20,0.88);backdrop-filter:blur(16px)}
+  .app{min-height:100vh;background:radial-gradient(ellipse at 20% 0%,${P.gradA} 0%,${P.bg} 55%),radial-gradient(ellipse at 80% 100%,${P.gradB} 0%,transparent 55%)}
+  .header{padding:1.25rem 2rem;border-bottom:1px solid ${P.border};display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;background:${P.headerBg};backdrop-filter:blur(16px)}
   .logo{display:flex;align-items:center;gap:.75rem;cursor:pointer}
   .logo-icon{width:34px;height:34px;background:linear-gradient(135deg,${P.accent},${P.pink});border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1rem}
   .logo-text{font-family:'Playfair Display',serif;font-size:1.35rem;color:${P.accentSoft};letter-spacing:.02em}
@@ -342,7 +348,9 @@ function getCSS() { return `
   .comment-author{font-weight:500;color:${P.accent};font-size:.75rem}
   .comment-time{font-size:.68rem;color:${P.muted}}
   .comment-text{color:${P.text};line-height:1.5}
-  .comment-input-row{display:flex;gap:.5rem;margin-top:.75rem}
+  .comment-input-row{display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap}
+  .comment-input-row .form-input{flex:1;min-width:0}
+  @media(max-width:600px){.overlay{align-items:flex-start;overflow-y:auto}.modal{max-height:none;-webkit-overflow-scrolling:touch}}
 
   /* BOARD */
   .board-filters{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.25rem}
@@ -356,6 +364,17 @@ function getCSS() { return `
   .board-reply{padding:.6rem .75rem;background:${P.surface};border-radius:7px;margin-bottom:.4rem;font-size:.8rem}
   .board-reply-author{font-weight:500;color:${P.pink};font-size:.72rem;margin-bottom:.2rem}
   .new-post-form{padding:1rem;background:${P.surface};border:1px solid ${P.border};border-radius:10px;margin-bottom:1.25rem}
+
+  /* WANTED */
+  .wanted-post{background:${P.card};border:1px solid ${P.border};border-radius:10px;padding:1rem;margin-bottom:.75rem;display:flex;flex-direction:column;gap:.4rem}
+  .wanted-post-title{font-family:'Playfair Display',serif;font-size:.95rem;color:${P.text}}
+  .wanted-post-tags{display:flex;gap:.4rem;flex-wrap:wrap}
+  .wanted-post-meta{font-size:.72rem;color:${P.muted};display:flex;gap:.75rem;flex-wrap:wrap;align-items:center}
+  .wanted-post-desc{font-size:.82rem;color:${P.muted};line-height:1.5}
+  .wanted-post.fulfilled{opacity:.55}
+  .wanted-fulfilled-badge{padding:.18rem .55rem;border-radius:20px;font-size:.62rem;font-weight:500;letter-spacing:.05em;text-transform:uppercase;background:rgba(111,207,151,.15);color:${P.success};border:1px solid rgba(111,207,151,.3)}
+  .theme-toggle{background:transparent;border:1px solid ${P.border};color:${P.muted};border-radius:6px;padding:.4rem .7rem;cursor:pointer;font-size:.88rem;transition:all .2s;line-height:1}
+  .theme-toggle:hover{border-color:${P.accent};color:${P.accent}}
 
   /* PIXIE DUST */
   .pixie-canvas{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;}
@@ -392,11 +411,11 @@ function PixieDust() {
     // ── ONE-TIME DUST BURST from logo ──
     const tutuDust = Array.from({length:80}, (_,tutuIdx) => ({
       tutuX: 48+(Math.random()*20-10), tutuY: 36+(Math.random()*20-10),
-      tutuVX: Math.random()*1.5+0.2, tutuVY: Math.random()*1.0-0.2,
-      tutuAX: -0.008, tutuAY: 0.025,
+      tutuVX: Math.random()*0.9+0.1, tutuVY: Math.random()*0.6-0.15,
+      tutuAX: -0.002, tutuAY: 0.018,
       tutuSize: Math.random()*2.5+0.8,
       tutuOpacity: Math.random()*0.6+0.4,
-      tutuFade: Math.random()*0.002+0.001,
+      tutuFade: Math.random()*0.0012+0.0004,
       tutuHue: Math.random()*25+38,
       tutuDelay: tutuIdx*2.5, tutuDone: false,
     }));
@@ -666,6 +685,10 @@ export default function TutuTrade() {
   const [confirmDeleteSchool, setConfirmDeleteSchool] = useState(null);
   const [addUserSchoolId, setAddUserSchoolId] = useState("");
   const [moveUserSchool, setMoveUserSchool] = useState({ fromId:"", toId:"" });
+  const [darkMode, setDarkMode] = useState(true);
+  const [wantedPosts, setWantedPosts] = useState([]);
+  const [wantedForm, setWantedForm] = useState({ title:"", style:"", size:"", description:"" });
+  const [wantedSchoolId, setWantedSchoolId] = useState("general");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -684,7 +707,7 @@ export default function TutuTrade() {
       if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); }
       else { setUserSchools([]); setIsAdmin(false); }
     });
-    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies(); loadCommentCounts();
+    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies(); loadCommentCounts(); loadWantedPosts();
     const ticker = setInterval(() => setTick(t => t + 1), 1000);
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
   }, []);
@@ -705,6 +728,7 @@ export default function TutuTrade() {
   };
   const loadBoardPosts = async () => { const { data } = await supabase.from("board_posts").select("*").order("created_at",{ascending:false}); if (data) setBoardPosts(data); };
   const loadBoardReplies = async () => { const { data } = await supabase.from("board_replies").select("*").order("created_at"); if (data) setBoardReplies(data); };
+  const loadWantedPosts = async () => { const { data } = await supabase.from("wanted_posts").select("*").order("created_at",{ascending:false}); if (data) setWantedPosts(data); };
   const loadCommission = async () => { const { data } = await supabase.from("settings").select("value").eq("key","commission_pct").single(); if (data) setCommissionPct(parseFloat(data.value)); };
   const loadEvents = async () => { const { data } = await supabase.from("events").select("*").order("event_date"); if (data) setEvents(data); };
 
@@ -1171,6 +1195,34 @@ export default function TutuTrade() {
     await loadBoardReplies();
   };
 
+  // ── WANTED ──
+  const handlePostWanted = async () => {
+    if (!wantedForm.title.trim()) return;
+    const schoolId = wantedSchoolId === "general" ? null : wantedSchoolId;
+    await supabase.from("wanted_posts").insert([{
+      school_id: schoolId,
+      user_email: user.email,
+      user_name: user.user_metadata?.full_name || user.email,
+      title: wantedForm.title.trim(),
+      dance_style: wantedForm.style || null,
+      size: wantedForm.size || null,
+      description: wantedForm.description.trim() || null,
+      fulfilled: false,
+    }]);
+    await loadWantedPosts();
+    setWantedForm({ title:"", style:"", size:"", description:"" });
+  };
+
+  const handleDeleteWanted = async (id) => {
+    await supabase.from("wanted_posts").delete().eq("id", id);
+    await loadWantedPosts();
+  };
+
+  const handleFulfillWanted = async (id, current) => {
+    await supabase.from("wanted_posts").update({ fulfilled: !current }).eq("id", id);
+    await loadWantedPosts();
+  };
+
   const handleAdminResetPassword = async (email) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${SITE_URL}/reset` });
     if (error) setSuccess(`Error: ${error.message}`);
@@ -1225,11 +1277,13 @@ export default function TutuTrade() {
     || ads.find(a => a.active && a.slot === "top");
   const totalRevenue = listings.reduce((s, l) => s + calcFees(l.price, getCommission(l.school_id)).commission, 0);
 
-  if (loading) return <div className="app"><style>{getCSS()}</style><div className="loading" style={{paddingTop:"5rem"}}>Loading TutuTrade...</div></div>;
+  const P = darkMode ? getP() : getLightP();
+
+  if (loading) return <div className="app"><style>{getCSS(P)}</style><div className="loading" style={{paddingTop:"5rem"}}>Loading TutuTrade...</div></div>;
 
   return (
     <div className="app">
-      <style>{getCSS()}</style>
+      <style>{getCSS(P)}</style>
       <PixieDust />
 
       {/* HEADER */}
@@ -1239,6 +1293,7 @@ export default function TutuTrade() {
           <div><div className="logo-text">TutuTrade</div><div className="logo-sub">Buy & Sell Dancewear</div></div>
         </div>
         <div className="header-actions">
+          <button className="theme-toggle" onClick={() => setDarkMode(d => !d)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>{darkMode ? "☀" : "🌙"}</button>
           {isAdmin && <button className="btn btn-admin btn-sm" onClick={() => setView("admin")}>⚙ Admin</button>}
           {user ? (
             <>
@@ -1835,6 +1890,7 @@ export default function TutuTrade() {
                 <button className={`nav-pill ${view==="browse"?"active":""}`} onClick={() => setView("browse")}>Browse all</button>
                 <button className={`nav-pill ${view==="mylistings"?"active":""}`} onClick={() => setView("mylistings")}>My listings</button>
                 <button className={`nav-pill ${view==="board"?"active":""}`} onClick={() => { setView("board"); loadBoardPosts(); loadBoardReplies(); }}>💬 Board</button>
+                <button className={`nav-pill ${view==="wanted"?"active":""}`} onClick={() => { setView("wanted"); loadWantedPosts(); }}>🔍 Wanted</button>
               </div>
             )}
 
@@ -2043,6 +2099,92 @@ export default function TutuTrade() {
                           </div>
                         </>
                       )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ── WANTED VIEW ── */}
+            {view === "wanted" && (
+              <div style={{maxWidth:720,paddingTop:"1.5rem"}}>
+                <div style={{marginBottom:"2rem",paddingBottom:"1.5rem",borderBottom:`1px solid ${P.border}`}}>
+                  <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"1.5rem",color:P.accentSoft,marginBottom:".3rem"}}>🔍 What's Needed</h2>
+                  <p style={{fontSize:".82rem",color:P.muted}}>Post items you're looking for — sellers can contact you directly.</p>
+                </div>
+
+                {/* School filter */}
+                <div className="board-filters">
+                  <button className={`nav-pill ${wantedSchoolId==="general"?"active":""}`} onClick={() => setWantedSchoolId("general")}>🌐 All Schools</button>
+                  {userSchools.map(us => {
+                    const sc = getSchoolColor(us.school_id);
+                    return (
+                      <button key={us.school_id} className={`nav-pill ${wantedSchoolId===us.school_id?"active":""}`}
+                        style={wantedSchoolId===us.school_id?{background:hexToRgba(sc,0.12),borderColor:sc,color:sc}:{}}
+                        onClick={() => setWantedSchoolId(us.school_id)}>
+                        🏫 {us.school_name}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Post form */}
+                {user && (
+                  <div className="new-post-form">
+                    <div style={{fontSize:".78rem",fontWeight:500,color:P.text,marginBottom:".75rem"}}>Post what you're looking for</div>
+                    <div className="form-group">
+                      <input className="form-input" placeholder="What are you looking for? e.g. Ballet shoes size UK 4" value={wantedForm.title} onChange={e=>setWantedForm(f=>({...f,title:e.target.value}))}/>
+                    </div>
+                    <div className="form-row" style={{marginBottom:".75rem"}}>
+                      <select className="form-select" value={wantedForm.style} onChange={e=>setWantedForm(f=>({...f,style:e.target.value}))}>
+                        <option value="">Any dance style</option>
+                        {danceStyles.map(s=><option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <select className="form-select" value={wantedForm.size} onChange={e=>setWantedForm(f=>({...f,size:e.target.value}))}>
+                        <option value="">Any size</option>
+                        {sizes.map(s=><option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group" style={{marginBottom:".5rem"}}>
+                      <textarea className="form-textarea" style={{minHeight:52}} placeholder="Extra details (optional)..." value={wantedForm.description} onChange={e=>setWantedForm(f=>({...f,description:e.target.value}))}/>
+                    </div>
+                    <button className="btn btn-primary btn-sm" onClick={handlePostWanted}>Post request</button>
+                  </div>
+                )}
+
+                {/* Posts */}
+                {wantedPosts.filter(p => wantedSchoolId === "general" ? true : p.school_id === wantedSchoolId).length === 0 && (
+                  <div className="empty-state" style={{gridColumn:"auto"}}><div className="empty-state-icon">🔍</div><h3>No requests yet</h3><p style={{marginTop:".5rem",fontSize:".83rem"}}>Be the first to post what you need!</p></div>
+                )}
+                {wantedPosts.filter(p => wantedSchoolId === "general" ? true : p.school_id === wantedSchoolId).map(post => {
+                  const sc = post.school_id ? getSchoolColor(post.school_id) : P.accent;
+                  return (
+                    <div key={post.id} className={`wanted-post ${post.fulfilled?"fulfilled":""}`} style={{borderLeft:`3px solid ${sc}`}}>
+                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:".5rem"}}>
+                        <div className="wanted-post-title">{post.title}</div>
+                        {post.fulfilled && <span className="wanted-fulfilled-badge">✓ Found</span>}
+                      </div>
+                      {(post.dance_style || post.size) && (
+                        <div className="wanted-post-tags">
+                          {post.dance_style && <span className="tag tag-style">{post.dance_style}</span>}
+                          {post.size && <span className="tag tag-size">{post.size}</span>}
+                        </div>
+                      )}
+                      {post.description && <div className="wanted-post-desc">{post.description}</div>}
+                      <div className="wanted-post-meta">
+                        <span style={{color:sc}}>{post.user_name}</span>
+                        <span>{new Date(post.created_at).toLocaleDateString("en-GB")}</span>
+                        {post.school_id && <span>🏫 {schools.find(s=>s.id===post.school_id)?.name}</span>}
+                        {user?.email === post.user_email && !post.fulfilled && (
+                          <button style={{background:"none",border:"none",color:P.success,cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif"}} onClick={() => handleFulfillWanted(post.id, post.fulfilled)}>✓ Mark as found</button>
+                        )}
+                        {user?.email === post.user_email && post.fulfilled && (
+                          <button style={{background:"none",border:"none",color:P.muted,cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif"}} onClick={() => handleFulfillWanted(post.id, post.fulfilled)}>Reopen</button>
+                        )}
+                        {(user?.email === post.user_email || isAdmin) && (
+                          <button style={{background:"none",border:"none",color:"#e07070",cursor:"pointer",fontSize:".72rem",fontFamily:"'Jost',sans-serif"}} onClick={() => handleDeleteWanted(post.id)}>Remove</button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
