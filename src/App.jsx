@@ -138,7 +138,8 @@ function getCSS(P) { return `
   .header-hi{font-size:.78rem;color:${P.muted}}
   .header-mobile-only{display:none}
   @media(max-width:640px){
-    .header{padding:.7rem 1rem}
+    .header{padding:.7rem .75rem}
+    .header-actions{gap:.35rem}
     .logo-sub{display:none}
     .logo-text{font-size:1.1rem}
     .header-hi{display:none}
@@ -1584,8 +1585,8 @@ export default function TutuTrade() {
               <button className="btn btn-ghost btn-sm header-desktop-only" onClick={handleLogout}>Sign out</button>
               {/* Mobile-only user menu */}
               <div className="user-menu-wrap header-mobile-only">
-                <button className="btn btn-ghost btn-sm" onClick={()=>setShowUserMenu(s=>!s)}>
-                  {user.user_metadata?.full_name?.split(" ")[0] || "Me"} ▾
+                <button className="btn btn-ghost btn-sm" onClick={()=>setShowUserMenu(s=>!s)} style={{padding:".4rem .6rem"}}>
+                  👤
                 </button>
                 {showUserMenu && (
                   <>
