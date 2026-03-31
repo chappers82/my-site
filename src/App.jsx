@@ -1995,7 +1995,7 @@ export default function TutuTrade() {
 
                 {schools.map(s => {
                   const memberCount = allUserSchools.filter(us => us.school_id === s.id).length;
-                  const listingCount = listings.filter(l => l.school_id === s.id).length;
+                  const listingCount = listings.filter(l => (l.school_ids?.length ? l.school_ids : (l.school_id ? [l.school_id] : [])).includes(s.id)).length;
                   const sc = s.color || P.accent;
                   return (
                     <div key={s.id} style={{padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10,marginBottom:".75rem",borderLeft:`4px solid ${sc}`}}>
@@ -2644,7 +2644,7 @@ export default function TutuTrade() {
                   {schools.map(s => {
                     const sc = s.color || P.accent;
                     const isActive = filters.school === s.id;
-                    const count = listings.filter(l => l.school_id === s.id && userSchoolIds.includes(l.school_id)).length;
+                    const count = listings.filter(l => (l.school_ids?.length ? l.school_ids : (l.school_id ? [l.school_id] : [])).includes(s.id) && userSchoolIds.includes(s.id)).length;
                     return (
                       <button
                         key={s.id}
