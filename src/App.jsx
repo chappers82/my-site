@@ -2432,15 +2432,20 @@ export default function TutuTrade() {
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:"1rem"}}>
                     <div>
                       <div className="analytics-section-title">🔥 Most viewed listings</div>
-                      {topListings.length === 0 ? <div style={{fontSize:".78rem",color:P.muted}}>No data yet</div> : topListings.map((item,i) => (
-                        <div key={i} className="analytics-list-item">
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:".78rem",color:P.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
-                            <div className="analytics-bar-inline" style={{width:`${(item.count/maxListingViews)*100}%`}}/>
+                      {topListings.length === 0 ? <div style={{fontSize:".78rem",color:P.muted}}>No data yet</div> : topListings.map((item,i) => {
+                        const listing = listings.find(l => l.id === item.id);
+                        return (
+                          <div key={i} className="analytics-list-item" style={{cursor:listing?"pointer":"default"}}
+                            onClick={()=>{ if(listing){ openListingDetail(listing); setView("admin"); } }}
+                            title={listing?"Click to view listing":""}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:".78rem",color:listing?P.accent:P.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+                              <div className="analytics-bar-inline" style={{width:`${(item.count/maxListingViews)*100}%`}}/>
+                            </div>
+                            <span style={{fontSize:".78rem",color:"#a99ef0",fontWeight:500,marginLeft:".5rem"}}>{item.count}</span>
                           </div>
-                          <span style={{fontSize:".78rem",color:"#a99ef0",fontWeight:500,marginLeft:".5rem"}}>{item.count}</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     <div>
                       <div className="analytics-section-title">🔍 Top search terms</div>
