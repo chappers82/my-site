@@ -1585,7 +1585,7 @@ export default function TutuTrade() {
               <button className="btn btn-ghost btn-sm header-desktop-only" onClick={handleLogout}>Sign out</button>
               {/* Mobile-only user menu */}
               <div className="user-menu-wrap header-mobile-only">
-                <button className="btn btn-ghost btn-sm" onClick={()=>setShowUserMenu(s=>!s)} style={{padding:".4rem .6rem",color:P.pink,borderColor:P.pink}}>
+                <button className="btn btn-ghost btn-sm" onClick={()=>setShowUserMenu(s=>!s)} style={{padding:".4rem .6rem",color:P.accent,borderColor:P.accent,background:`rgba(201,169,110,.1)`}}>
                   👤
                 </button>
                 {showUserMenu && (
