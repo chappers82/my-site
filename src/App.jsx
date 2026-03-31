@@ -1378,14 +1378,13 @@ export default function TutuTrade() {
   const deleteNotification = async (e, id) => {
     e.stopPropagation();
     setNotifications(n => n.filter(x => x.id !== id));
-    await supabase.from("notifications").delete().eq("id", id);
+    await supabase.from("notifications").delete().eq("id", id).eq("user_email", user.email);
   };
 
   const clearAllNotifications = async () => {
-    const ids = notifications.map(n => n.id);
-    if (!ids.length) return;
+    if (!notifications.length) return;
     setNotifications([]);
-    await supabase.from("notifications").delete().in("id", ids);
+    await supabase.from("notifications").delete().eq("user_email", user.email);
   };
 
   const clearFairyHistory = async () => {
