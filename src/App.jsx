@@ -2390,7 +2390,7 @@ export default function TutuTrade() {
                     <div className="analytics-card"><div className="analytics-card-value">{analyticsData.length}</div><div className="analytics-card-label">Total events</div></div>
                   </div>
 
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem",marginBottom:"1.5rem"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:"1rem",marginBottom:"1.5rem"}}>
                     <div style={{padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10}}>
                       <div className="analytics-section-title">Daily active users</div>
                       <div className="bar-chart">
@@ -2415,7 +2415,7 @@ export default function TutuTrade() {
                     </div>
                   </div>
 
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:"1rem"}}>
                     <div>
                       <div className="analytics-section-title">🔥 Most viewed listings</div>
                       {topListings.length === 0 ? <div style={{fontSize:".78rem",color:P.muted}}>No data yet</div> : topListings.map((item,i) => (
