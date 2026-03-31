@@ -855,12 +855,21 @@ export default function TutuTrade() {
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
   const [analyticsData, setAnalyticsData] = useState([]);
   const [analyticsRange, setAnalyticsRange] = useState(7);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeTo, setComposeTo] = useState("");
+  const [composeBody, setComposeBody] = useState("");
   const searchTrackTimer = useRef(null);
+  const pendingListingId = useRef(null);
+  const pendingSchoolId = useRef(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const joinCode = params.get("join");
     if (joinCode) { setAuthForm(f => ({ ...f, schoolCode: joinCode.toUpperCase() })); setAuthTab("register"); setModal("auth"); }
+    const listingParam = params.get("listing");
+    if (listingParam) pendingListingId.current = listingParam;
+    const schoolParam = params.get("school");
+    if (schoolParam) pendingSchoolId.current = schoolParam;
   }, []);
 
   useEffect(() => {
@@ -917,7 +926,20 @@ export default function TutuTrade() {
     return () => clearTimeout(searchTrackTimer.current);
   }, [filters.search]);
 
-  const loadListings = async () => { const { data } = await supabase.from("listings").select("*").order("created_at",{ascending:false}); if (data) setListings(data); };
+  const loadListings = async () => {
+    const { data } = await supabase.from("listings").select("*").order("created_at",{ascending:false});
+    if (data) {
+      setListings(data);
+      if (pendingListingId.current) {
+        const found = data.find(l => l.id === pendingListingId.current);
+        if (found) { setSelectedListing(found); setModal("detail"); loadComments(found.id); pendingListingId.current = null; }
+      }
+      if (pendingSchoolId.current) {
+        setFilters(f => ({ ...f, school: pendingSchoolId.current }));
+        pendingSchoolId.current = null;
+      }
+    }
+  };
   const loadAds = async () => { const { data } = await supabase.from("ads").select("*").order("sort_order").order("created_at",{ascending:false}); if (data) setAds(data); };
   const loadSchools = async () => { const { data } = await supabase.from("schools").select("*").order("name"); if (data) setSchools(data); };
   const loadComments = async (listingId) => { const { data } = await supabase.from("listing_comments").select("*").eq("listing_id", listingId).order("created_at"); if (data) setComments(data); };
@@ -1662,7 +1684,13 @@ export default function TutuTrade() {
     return (r.reduce((s, x) => s + x.rating, 0) / r.length) >= 4.0;
   };
   const shareOnWhatsApp = (listing) => {
-    const msg = `🩰 Check out this listing on TutuTrade!\n\n*${listing.title}*\n💰 £${listing.price}${listing.style ? `\n💃 ${listing.style}` : ""}${listing.size ? `\n📏 ${listing.size}` : ""}${listing.condition ? `\n✨ ${listing.condition}` : ""}\n\nVisit TutuTrade to buy: ${SITE_URL}`;
+    const url = `${SITE_URL}/?listing=${listing.id}`;
+    const msg = `🩰 Check out this listing on TutuTrade!\n\n*${listing.title}*\n💰 £${listing.price}${listing.style ? `\n💃 ${listing.style}` : ""}${listing.size ? `\n📏 ${listing.size}` : ""}${listing.condition ? `\n✨ ${listing.condition}` : ""}\n\n👉 View listing: ${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+  };
+  const shareSchoolOnWhatsApp = (school) => {
+    const url = `${SITE_URL}/?school=${school.id}`;
+    const msg = `🩰 *${school.name}* is on TutuTrade!\n\nBuy & sell pre-loved dancewear with other parents at our dance school — costumes, shoes, accessories and more.\n\n👉 Browse our school's shop: ${url}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
   };
   const handleSubmitRating = async () => {
@@ -1716,6 +1744,36 @@ export default function TutuTrade() {
       await loadMessages(conv.id);
       closeModal();
     }
+  };
+  const deleteMessage = async (msgId) => {
+    await supabase.from("messages").delete().eq("id", msgId);
+    setConvMessages(prev => prev.filter(m => m.id !== msgId));
+  };
+  const deleteConversation = async (convId) => {
+    if (!window.confirm("Delete this conversation? This cannot be undone.")) return;
+    await supabase.from("messages").delete().eq("conversation_id", convId);
+    await supabase.from("conversations").delete().eq("id", convId);
+    setConversations(prev => prev.filter(c => c.id !== convId));
+    if (activeConv?.id === convId) { setActiveConv(null); setConvMessages([]); }
+  };
+  const startDirectMessage = async () => {
+    const recipientEmail = composeTo.trim().toLowerCase();
+    if (!recipientEmail || !composeBody.trim() || recipientEmail === user.email) return;
+    let conv = conversations.find(c => !c.listing_id && (
+      (c.buyer_email === user.email && c.seller_email === recipientEmail) ||
+      (c.seller_email === user.email && c.buyer_email === recipientEmail)
+    ));
+    if (!conv) {
+      const { data } = await supabase.from("conversations").insert([{ listing_id: null, buyer_email: user.email, seller_email: recipientEmail }]).select().single();
+      if (!data) return;
+      conv = data;
+    }
+    const msg = composeBody.trim();
+    const { data: msgData } = await supabase.from("messages").insert([{ conversation_id: conv.id, sender_email: user.email, body: msg }]).select().single();
+    setComposeTo(""); setComposeBody(""); setComposeOpen(false);
+    await loadConversations();
+    setActiveConv(conv);
+    setConvMessages(msgData ? [msgData] : []);
   };
   const sendMessage = async () => {
     if (!newMessage.trim() || !activeConv) return;
@@ -2690,9 +2748,17 @@ export default function TutuTrade() {
                   </p>
                 )}
                 {filters.school && userSchools.length > 1 && (
-                  <button style={{background:"none",border:"none",color:P.muted,fontSize:".75rem",cursor:"pointer",textDecoration:"underline",fontFamily:"'Jost',sans-serif"}} onClick={() => setFilters(f=>({...f,school:""}))}>
-                    Clear filter — show all schools
-                  </button>
+                  <div style={{display:"flex",alignItems:"center",gap:".75rem",flexWrap:"wrap",marginTop:".2rem"}}>
+                    <button style={{background:"none",border:"none",color:P.muted,fontSize:".75rem",cursor:"pointer",textDecoration:"underline",fontFamily:"'Jost',sans-serif"}} onClick={() => setFilters(f=>({...f,school:""}))}>
+                      Clear filter — show all schools
+                    </button>
+                    {(() => { const sc = getSchool(filters.school); return sc ? (
+                      <button style={{display:"inline-flex",alignItems:"center",gap:".35rem",background:"#25D366",color:"#fff",border:"none",borderRadius:8,padding:".28rem .65rem",fontSize:".72rem",cursor:"pointer",fontFamily:"'Jost',sans-serif",fontWeight:500}} onClick={()=>shareSchoolOnWhatsApp(sc)}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                        Share {sc.name}'s shop
+                      </button>
+                    ) : null; })()}
+                  </div>
                 )}
               </div>
             )}
@@ -2990,21 +3056,46 @@ export default function TutuTrade() {
                     <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"1.5rem",color:P.accentSoft,marginBottom:".3rem"}}>✉ Messages</h2>
                     <p style={{fontSize:".82rem",color:P.muted}}>Direct messages with buyers and sellers.</p>
                   </div>
-                  {activeConv && <button className="btn btn-ghost btn-sm" onClick={()=>{setActiveConv(null);setConvMessages([]);}}>← Back to inbox</button>}
+                  <div style={{display:"flex",gap:".5rem"}}>
+                    {activeConv && <button className="btn btn-ghost btn-sm" onClick={()=>{setActiveConv(null);setConvMessages([]);setComposeOpen(false);}}>← Back to inbox</button>}
+                    {!activeConv && <button className="btn btn-ghost btn-sm" onClick={()=>setComposeOpen(o=>!o)}>✏ New message</button>}
+                  </div>
                 </div>
+
+                {/* Compose panel */}
+                {!activeConv && composeOpen && (
+                  <div style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:"1.25rem",marginBottom:"1rem"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:".85rem"}}>
+                      <strong style={{fontSize:".9rem",color:P.text}}>New Direct Message</strong>
+                      <button onClick={()=>setComposeOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:P.muted,fontSize:"1.1rem",lineHeight:1}}>✕</button>
+                    </div>
+                    <div style={{marginBottom:".65rem"}}>
+                      <label className="form-label">To (email address)</label>
+                      <input className="form-input" placeholder="their@email.com" value={composeTo} onChange={e=>setComposeTo(e.target.value)}/>
+                    </div>
+                    <div style={{marginBottom:".75rem"}}>
+                      <label className="form-label">Message</label>
+                      <textarea className="form-input" rows={3} placeholder="Write your message..." value={composeBody} onChange={e=>setComposeBody(e.target.value)} style={{resize:"vertical"}}/>
+                    </div>
+                    <button className="btn btn-primary btn-sm" onClick={startDirectMessage} style={{width:"100%"}}>Send Message</button>
+                  </div>
+                )}
 
                 {!activeConv ? (
                   <div className="inbox-list">
                     {conversations.length === 0 ? (
-                      <div className="empty-state"><div className="empty-state-icon">✉</div><h3>No messages yet</h3><p style={{marginTop:".5rem",fontSize:".83rem"}}>Click "Message seller" on a listing to start a conversation.</p></div>
+                      <div className="empty-state"><div className="empty-state-icon">✉</div><h3>No messages yet</h3><p style={{marginTop:".5rem",fontSize:".83rem"}}>Click "Message seller" on a listing to start a conversation, or use "✏ New message" above.</p></div>
                     ) : conversations.map(conv => {
                       const otherEmail = conv.buyer_email === user.email ? conv.seller_email : conv.buyer_email;
-                      const listing = listings.find(l => l.id === conv.listing_id);
+                      const listing = conv.listing_id ? listings.find(l => l.id === conv.listing_id) : null;
                       return (
-                        <div key={conv.id} className="inbox-item" onClick={async()=>{setActiveConv(conv);await loadMessages(conv.id);}}>
-                          <div className="inbox-item-title">{listing ? listing.title : "Listing removed"}</div>
-                          <div className="inbox-item-preview">{otherEmail}</div>
-                          <div className="inbox-item-meta">{new Date(conv.created_at).toLocaleDateString("en-GB")}</div>
+                        <div key={conv.id} className="inbox-item" style={{display:"flex",alignItems:"center",gap:".5rem"}} onClick={async()=>{setActiveConv(conv);await loadMessages(conv.id);}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div className="inbox-item-title">{listing ? listing.title : conv.listing_id ? "Listing removed" : "Direct message"}</div>
+                            <div className="inbox-item-preview">{otherEmail}</div>
+                            <div className="inbox-item-meta">{new Date(conv.created_at).toLocaleDateString("en-GB")}</div>
+                          </div>
+                          <button title="Delete conversation" onClick={e=>{e.stopPropagation();deleteConversation(conv.id);}} style={{background:"none",border:"none",cursor:"pointer",color:P.muted,fontSize:"1rem",padding:".3rem .5rem",borderRadius:6,flexShrink:0,lineHeight:1}} onMouseOver={e=>e.currentTarget.style.color="#e07070"} onMouseOut={e=>e.currentTarget.style.color=P.muted}>🗑</button>
                         </div>
                       );
                     })}
@@ -3013,11 +3104,11 @@ export default function TutuTrade() {
                   <div>
                     <div className="conv-header">
                       {(() => {
-                        const listing = listings.find(l => l.id === activeConv.listing_id);
+                        const listing = activeConv.listing_id ? listings.find(l => l.id === activeConv.listing_id) : null;
                         const otherEmail = activeConv.buyer_email === user.email ? activeConv.seller_email : activeConv.buyer_email;
                         return (
                           <>
-                            {listing && <div style={{flex:1}}><div style={{fontSize:".88rem",color:P.text,fontWeight:500}}>{listing.title}</div><div style={{fontSize:".73rem",color:P.muted}}>£{listing.price}</div></div>}
+                            <div style={{flex:1}}>{listing ? <><div style={{fontSize:".88rem",color:P.text,fontWeight:500}}>{listing.title}</div><div style={{fontSize:".73rem",color:P.muted}}>£{listing.price}</div></> : <div style={{fontSize:".88rem",color:P.text,fontWeight:500}}>Direct message</div>}</div>
                             <div style={{fontSize:".78rem",color:P.muted}}>with {otherEmail}</div>
                           </>
                         );
@@ -3027,7 +3118,10 @@ export default function TutuTrade() {
                       {convMessages.length === 0 && <div style={{textAlign:"center",color:P.muted,fontSize:".8rem",paddingTop:"2rem"}}>No messages yet — say hello!</div>}
                       {convMessages.map(msg => (
                         <div key={msg.id} style={{display:"flex",flexDirection:"column",alignItems:msg.sender_email===user.email?"flex-end":"flex-start"}}>
-                          <div className={`msg-bubble ${msg.sender_email===user.email?"mine":"theirs"}`}>{msg.body}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:".3rem"}}>
+                            {msg.sender_email===user.email && <button title="Delete message" onClick={()=>deleteMessage(msg.id)} style={{background:"none",border:"none",cursor:"pointer",color:P.muted,fontSize:".72rem",lineHeight:1,padding:"2px 4px",borderRadius:4,opacity:.45,transition:"opacity .15s"}} onMouseOver={e=>e.currentTarget.style.opacity=1} onMouseOut={e=>e.currentTarget.style.opacity=.45}>✕</button>}
+                            <div className={`msg-bubble ${msg.sender_email===user.email?"mine":"theirs"}`}>{msg.body}</div>
+                          </div>
                           <div className="msg-time">{new Date(msg.created_at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</div>
                         </div>
                       ))}
