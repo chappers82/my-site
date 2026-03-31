@@ -485,10 +485,10 @@ function PixieDust() {
       return {tutuX:tutuM, tutuY:tutuM+Math.random()*(tutuCanvas.height-tutuM*2)};
     };
     const tutuFairy = {
-      tutuX: tutuCanvas.width*0.55, tutuY: tutuCanvas.height*0.28,
-      tutuTX: 0, tutuTY: 0,
+      tutuX: tutuCanvas.width*0.08, tutuY: 82,
+      tutuTX: tutuCanvas.width*0.92, tutuTY: 82,
       tutuWing: 0, tutuWobble: 0, tutuTrail: [],
-      tutuState: "waving", tutuTimer: 230,
+      tutuState: "waving", tutuTimer: 0,
     };
 
     const tutuDrawStar = (tutuSX, tutuSY, tutuSZ, tutuSH, tutuSA) => {
@@ -591,10 +591,12 @@ function PixieDust() {
         }
       };
       if(tutuFairy.tutuState==="waving"){
-        tutuFairy.tutuY+=Math.sin(tutuFairy.tutuWobble)*0.35;
+        // Sweep across the top of the page
+        const tutuWDX=tutuFairy.tutuTX-tutuFairy.tutuX;
+        tutuFairy.tutuX+=tutuWDX*0.012;
+        tutuFairy.tutuY=82+Math.sin(tutuFairy.tutuWobble)*5;
         if(tutuFrame%2===0) tutuEmitWand(3,0.005);
-        tutuFairy.tutuTimer--;
-        if(tutuFairy.tutuTimer<=0){const tutuNT=tutuNewTarget();tutuFairy.tutuTX=tutuNT.tutuX;tutuFairy.tutuTY=tutuNT.tutuY;tutuFairy.tutuState="flying";}
+        if(Math.abs(tutuWDX)<12){const tutuNT=tutuNewTarget();tutuFairy.tutuTX=tutuNT.tutuX;tutuFairy.tutuTY=tutuNT.tutuY;tutuFairy.tutuState="flying";}
       } else if(tutuFairy.tutuState==="flying"){
         const tutuDX=tutuFairy.tutuTX-tutuFairy.tutuX, tutuDY=tutuFairy.tutuTY-tutuFairy.tutuY;
         const tutuDist=Math.sqrt(tutuDX*tutuDX+tutuDY*tutuDY);
