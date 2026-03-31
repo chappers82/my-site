@@ -25,6 +25,9 @@ const DEFAULT_NOTIF_PREFS = {
   item_sold:      { inapp: true,  email: true  },
   fairy_found:    { inapp: true,  email: true  },
   new_user:       { inapp: true,  email: true  },
+  price_drop:     { inapp: true,  email: true  },
+  listing_expiring: { inapp: true, email: true },
+  new_message:    { inapp: true,  email: true  },
 };
 const SITE_URL = window.location.origin;
 
@@ -468,6 +471,41 @@ function getCSS(P) { return `
   .event-item-info{flex:1}
   .event-item-title{font-size:.88rem;color:${P.text};font-weight:500}
   .event-item-meta{font-size:.73rem;color:${P.muted};margin-top:.2rem}
+
+  /* FAVOURITES */
+  .heart-btn{background:none;border:none;cursor:pointer;font-size:1.1rem;line-height:1;padding:.15rem .3rem;border-radius:4px;transition:transform .15s;color:${P.muted}}
+  .heart-btn:hover{transform:scale(1.25)}
+  .heart-btn.active{color:#e07070}
+
+  /* STAR RATING */
+  .star-row{display:flex;gap:.1rem;align-items:center}
+  .star{font-size:.85rem;cursor:pointer;line-height:1;transition:transform .1s}
+  .star:hover{transform:scale(1.2)}
+  .star.filled{color:#f0a500}
+  .star.empty{color:${P.border}}
+  .rating-count{font-size:.68rem;color:${P.muted};margin-left:.25rem}
+
+  /* EXPIRY BADGE */
+  .expiry-badge{display:inline-block;padding:.15rem .5rem;border-radius:10px;font-size:.62rem;font-weight:500;letter-spacing:.04em;text-transform:uppercase}
+  .expiry-badge.warning{background:rgba(255,180,0,.15);color:#ffb400;border:1px solid rgba(255,180,0,.3)}
+  .expiry-badge.expired{background:rgba(224,112,112,.15);color:#e07070;border:1px solid rgba(224,112,112,.3)}
+
+  /* MESSAGES VIEW */
+  .inbox-list{display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.5rem}
+  .inbox-item{padding:.85rem 1rem;background:${P.card};border:1px solid ${P.border};border-radius:10px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;gap:.25rem}
+  .inbox-item:hover{border-color:${P.accent};background:${P.surface}}
+  .inbox-item.unread{border-left:3px solid ${P.accent}}
+  .inbox-item-title{font-size:.88rem;color:${P.text};font-weight:500}
+  .inbox-item-preview{font-size:.77rem;color:${P.muted};white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .inbox-item-meta{font-size:.68rem;color:${P.muted}}
+  .conv-header{display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid ${P.border}}
+  .conv-messages{display:flex;flex-direction:column;gap:.6rem;margin-bottom:1rem;min-height:200px;max-height:400px;overflow-y:auto;padding:.5rem 0}
+  .msg-bubble{max-width:78%;padding:.5rem .85rem;border-radius:12px;font-size:.83rem;line-height:1.5;word-break:break-word}
+  .msg-bubble.mine{align-self:flex-end;background:rgba(124,111,224,.18);border:1px solid rgba(124,111,224,.3);color:${P.text};border-radius:12px 12px 2px 12px}
+  .msg-bubble.theirs{align-self:flex-start;background:${P.card};border:1px solid ${P.border};color:${P.text};border-radius:12px 12px 12px 2px}
+  .msg-time{font-size:.62rem;color:${P.muted};margin-top:.15rem}
+  .msg-input-row{display:flex;gap:.5rem;margin-top:.5rem}
+  .msg-input-row .form-input{flex:1}
 `; }
 
 function PixieDust() {
@@ -786,6 +824,14 @@ export default function TutuTrade() {
   const [fairyMessages, setFairyMessages] = useState([]);
   const [fairyChatInput, setFairyChatInput] = useState("");
   const [fairySearching, setFairySearching] = useState(false);
+  const [favourites, setFavourites] = useState([]);
+  const [ratings, setRatings] = useState([]);
+  const [ratingForm, setRatingForm] = useState({ rating: 0, comment: "", listingId: null });
+  const [conversations, setConversations] = useState([]);
+  const [activeConv, setActiveConv] = useState(null);
+  const [convMessages, setConvMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [unreadMsgCount, setUnreadMsgCount] = useState(0);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -796,15 +842,15 @@ export default function TutuTrade() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); }
+      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadConversations(session.user.email); }
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); }
-      else { setUserSchools([]); setIsAdmin(false); setNotifPrefs(DEFAULT_NOTIF_PREFS); }
+      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadConversations(session.user.email); }
+      else { setUserSchools([]); setIsAdmin(false); setNotifPrefs(DEFAULT_NOTIF_PREFS); setFavourites([]); setConversations([]); }
     });
-    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies(); loadCommentCounts(); loadWantedPosts(); loadFairyName();
+    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies(); loadCommentCounts(); loadWantedPosts(); loadFairyName(); loadRatings();
     const ticker = setInterval(() => setTick(t => t + 1), 1000);
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
   }, []);
@@ -855,6 +901,29 @@ export default function TutuTrade() {
   const loadWantedPosts = async () => { const { data } = await supabase.from("wanted_posts").select("*").order("created_at",{ascending:false}); if (data) setWantedPosts(data); };
   const loadCommission = async () => { const { data } = await supabase.from("settings").select("value").eq("key","commission_pct").single(); if (data) setCommissionPct(parseFloat(data.value)); };
   const loadFairyName = async () => { const { data } = await supabase.from("settings").select("value").eq("key","fairy_name").single(); if (data) setFairyName(data.value); };
+  const loadFavourites = async (email) => { const e = email || user?.email; if (!e) return; const { data } = await supabase.from("favourites").select("*").eq("user_email", e); if (data) setFavourites(data); };
+  const loadRatings = async () => { const { data } = await supabase.from("seller_ratings").select("*"); if (data) setRatings(data); };
+  const loadConversations = async (email) => {
+    const e = email || user?.email; if (!e) return;
+    const { data } = await supabase.from("conversations").select("*").or(`buyer_email.eq.${e},seller_email.eq.${e}`).order("created_at", { ascending: false });
+    if (data) { setConversations(data); }
+  };
+  const loadMessages = async (convId) => {
+    const { data } = await supabase.from("messages").select("*").eq("conversation_id", convId).order("created_at");
+    if (data) setConvMessages(data);
+    await supabase.from("messages").update({ read: true }).eq("conversation_id", convId).neq("sender_email", user.email);
+    await loadConversations();
+    const unread = await countUnreadMessages();
+    setUnreadMsgCount(unread);
+  };
+  const countUnreadMessages = async () => {
+    if (!user) return 0;
+    const { data: convs } = await supabase.from("conversations").select("id").or(`buyer_email.eq.${user.email},seller_email.eq.${user.email}`);
+    if (!convs?.length) return 0;
+    const ids = convs.map(c => c.id);
+    const { count } = await supabase.from("messages").select("id", { count: "exact", head: true }).in("conversation_id", ids).eq("read", false).neq("sender_email", user.email);
+    return count || 0;
+  };
   const loadNotifPrefs = async (email) => {
     const { data } = await supabase.from("settings").select("value").eq("key", `notif_prefs_${email}`).single();
     if (data?.value) { try { setNotifPrefs(p => ({...p, ...JSON.parse(data.value)})); } catch {} }
@@ -1105,6 +1174,7 @@ export default function TutuTrade() {
       seller_paypal: user.user_metadata?.paypal_email || null,
       school_name: isGeneral ? "General" : (school?.school_name || ""),
       school_id: isGeneral ? null : (schoolId || null),
+      expires_at: new Date(Date.now() + 60*24*60*60*1000).toISOString(),
     }]);
     if (error) return setCreateError("Failed to create listing. Please try again.");
     await loadListings();
@@ -1221,19 +1291,44 @@ export default function TutuTrade() {
     const { title, style, size, condition, price } = editForm;
     if (!title || !style || !condition || !price) return setEditError("Please fill in all required fields.");
     if (isNaN(price) || Number(price) <= 0) return setEditError("Please enter a valid price.");
+    const oldPrice = selectedListing.price;
+    const newPrice = Number(price);
     const updates = {
       title, style, size, condition,
-      price: Number(price),
+      price: newPrice,
       description: editForm.description,
       image: editForm.images?.[0] || editForm.image || null,
       images: editForm.images || [],
     };
-    // Build query — admin can update any listing, owner can update their own
     let query = supabase.from("listings").update(updates).eq("id", selectedListing.id);
     const { error } = await query;
     if (error) {
       console.error("Update error:", error);
       return setEditError(`Failed to update: ${error.message}`);
+    }
+    // Price drop — notify favouriters
+    if (newPrice < oldPrice) {
+      const { data: favs } = await supabase.from("favourites").select("user_email").eq("listing_id", selectedListing.id);
+      if (favs) {
+        for (const fav of favs) {
+          if (fav.user_email === user.email) continue;
+          const prefs = await getPrefsForEmail(fav.user_email);
+          if (prefs.price_drop?.inapp !== false) await pushNotification(fav.user_email, "price_drop", "📉 Price drop on a saved item!", `"${title}" dropped from £${oldPrice} to £${newPrice}`, selectedListing.id);
+          if (prefs.price_drop?.email !== false) await sendResendEmail({
+            to: fav.user_email,
+            subject: `📉 Price drop on ${title}`,
+            html: emailTemplate("Price drop on a saved item!", `
+              <p style="color:#a892c4;margin-bottom:1rem">An item you saved has dropped in price:</p>
+              <div style="padding:.75rem 1rem;background:#1e1729;border-radius:8px;margin-bottom:.75rem;border-left:3px solid #6fcf97">
+                <strong style="color:#e8d5aa">${title}</strong><br/>
+                <span style="color:#8a7a9e;text-decoration:line-through">Was £${oldPrice}</span>
+                <span style="color:#6fcf97;font-size:1.1em;margin-left:.75rem">Now £${newPrice}</span>
+              </div>
+              <p style="color:#8a7a9e;font-size:.85em">Visit TutuTrade to grab it before it's gone!</p>
+            `),
+          });
+        }
+      }
     }
     await loadListings(); closeModal(); setSuccess("Listing updated!");
   };
@@ -1478,6 +1573,103 @@ export default function TutuTrade() {
     if (user) {
       await supabase.from("wanted_posts").delete().eq("user_email", user.email).ilike("description", "🧚 Fairy search:%");
     }
+  };
+
+  // ── FAVOURITES ──
+  const toggleFavourite = async (e, listingId) => {
+    e.stopPropagation();
+    if (!user) { setModal("auth"); return; }
+    const existing = favourites.find(f => f.listing_id === listingId);
+    if (existing) {
+      setFavourites(f => f.filter(x => x.listing_id !== listingId));
+      await supabase.from("favourites").delete().eq("id", existing.id);
+    } else {
+      const { data } = await supabase.from("favourites").insert([{ user_email: user.email, listing_id: listingId }]).select().single();
+      if (data) setFavourites(f => [...f, data]);
+    }
+  };
+
+  // ── RATINGS ──
+  const getAvgRating = (sellerEmail) => {
+    const r = ratings.filter(x => x.seller_email === sellerEmail);
+    if (!r.length) return null;
+    return { avg: (r.reduce((s, x) => s + x.rating, 0) / r.length).toFixed(1), count: r.length };
+  };
+  const handleSubmitRating = async () => {
+    if (!ratingForm.rating || !ratingForm.listingId) return;
+    const listing = listings.find(l => l.id === ratingForm.listingId);
+    if (!listing) return;
+    const { error } = await supabase.from("seller_ratings").insert([{
+      listing_id: ratingForm.listingId,
+      seller_email: listing.seller_email,
+      buyer_email: user.email,
+      rating: ratingForm.rating,
+      comment: ratingForm.comment.trim() || null,
+    }]);
+    if (!error) {
+      await loadRatings();
+      setRatingForm({ rating: 0, comment: "", listingId: null });
+      setSuccess("Thank you for your rating! ⭐");
+    }
+  };
+  const StarPicker = ({ value, onChange }) => (
+    <div className="star-row" style={{gap:".3rem"}}>
+      {[1,2,3,4,5].map(n => (
+        <span key={n} className={`star ${n <= value ? "filled" : "empty"}`} style={{fontSize:"1.5rem",cursor:"pointer"}} onClick={() => onChange(n)}>★</span>
+      ))}
+    </div>
+  );
+
+  // ── RENEW LISTING ──
+  const handleRenewListing = async (id) => {
+    const expires_at = new Date(Date.now() + 60*24*60*60*1000).toISOString();
+    await supabase.from("listings").update({ expires_at, expired: false, expiry_warned: false, renewed_at: new Date().toISOString() }).eq("id", id);
+    await loadListings();
+    setSuccess("Listing renewed for another 60 days! 🎉");
+  };
+
+  // ── MESSAGING ──
+  const startConversation = async (listing) => {
+    if (!user || listing.seller_email === user.email) return;
+    let conv = conversations.find(c => c.listing_id === listing.id && c.buyer_email === user.email);
+    if (!conv) {
+      const { data } = await supabase.from("conversations").insert([{
+        listing_id: listing.id,
+        buyer_email: user.email,
+        seller_email: listing.seller_email,
+      }]).select().single();
+      if (data) { conv = data; setConversations(c => [...c, data]); }
+    }
+    if (conv) {
+      setActiveConv(conv);
+      setView("messages");
+      await loadMessages(conv.id);
+      closeModal();
+    }
+  };
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !activeConv) return;
+    const msg = newMessage.trim();
+    setNewMessage("");
+    const { data } = await supabase.from("messages").insert([{
+      conversation_id: activeConv.id,
+      sender_email: user.email,
+      body: msg,
+    }]).select().single();
+    if (data) setConvMessages(m => [...m, data]);
+    const otherEmail = activeConv.buyer_email === user.email ? activeConv.seller_email : activeConv.buyer_email;
+    const prefs = await getPrefsForEmail(otherEmail);
+    const senderName = user.user_metadata?.full_name || user.email;
+    if (prefs.new_message?.inapp !== false) await pushNotification(otherEmail, "new_message", "✉ New message", `${senderName}: "${msg.slice(0,60)}${msg.length>60?"...":""}"`, activeConv.listing_id);
+    if (prefs.new_message?.email !== false) await sendResendEmail({
+      to: otherEmail,
+      subject: `✉ New message from ${senderName} on TutuTrade`,
+      html: emailTemplate("You have a new message!", `
+        <p style="color:#a892c4;margin-bottom:1rem"><strong style="color:#f0eaf8">${senderName}</strong> sent you a message${activeConv.listing_id ? ` about a listing` : ""}:</p>
+        <div style="padding:1rem;background:#2d2142;border-left:3px solid #c9a96e;border-radius:6px;color:#f0eaf8;margin-bottom:1.25rem">${msg}</div>
+        <p style="color:#a892c4">Visit TutuTrade to reply.</p>
+      `),
+    });
   };
 
   const fairySearch = async () => {
@@ -2158,6 +2350,9 @@ export default function TutuTrade() {
                     {key:"wishlist_match", label:"Wanted list matches"},
                     {key:"item_sold",      label:"My item sold"},
                     {key:"fairy_found",    label:`${fairyName} search results`},
+                    {key:"price_drop",     label:"💾 Price drop on saved item"},
+                    {key:"new_message",    label:"✉ Direct messages"},
+                    {key:"listing_expiring", label:"⏳ Listing expiring soon"},
                     ...(isAdmin ? [{key:"new_user", label:"New user signups"}] : []),
                   ].map(({key, label}) => (
                     <div key={key} className="notif-pref-row">
@@ -2286,6 +2481,8 @@ export default function TutuTrade() {
                 <button className={`nav-pill ${view==="mylistings"?"active":""}`} onClick={() => setView("mylistings")}>My listings</button>
                 <button className={`nav-pill ${view==="board"?"active":""}`} onClick={() => { setView("board"); loadBoardPosts(); loadBoardReplies(); setBoardSchoolId(userSchools[0]?.school_id || "general"); }}>💬 Board{boardPosts.length > 0 && <span style={{marginLeft:".4rem",background:P.accent,color:"#fff",borderRadius:10,fontSize:".65rem",padding:"1px 6px",fontWeight:700,verticalAlign:"middle"}}>{boardPosts.length}</span>}</button>
                 <button className={`nav-pill ${view==="wanted"?"active":""}`} onClick={() => { setView("wanted"); loadWantedPosts(); setWantedSchoolId(userSchools[0]?.school_id || "general"); }}>🔍 Wanted{wantedPosts.filter(p=>!p.fulfilled).length > 0 && <span style={{marginLeft:".4rem",background:P.accent,color:"#fff",borderRadius:10,fontSize:".65rem",padding:"1px 6px",fontWeight:700,verticalAlign:"middle"}}>{wantedPosts.filter(p=>!p.fulfilled).length}</span>}</button>
+                <button className={`nav-pill ${view==="favourites"?"active":""}`} onClick={() => setView("favourites")}>❤ Saved{favourites.length > 0 && <span style={{marginLeft:".4rem",background:"#e07070",color:"#fff",borderRadius:10,fontSize:".65rem",padding:"1px 6px",fontWeight:700,verticalAlign:"middle"}}>{favourites.length}</span>}</button>
+                <button className={`nav-pill ${view==="messages"?"active":""}`} onClick={async()=>{setView("messages");setActiveConv(null);setConvMessages([]);await loadConversations();const u=await countUnreadMessages();setUnreadMsgCount(u);}}>✉ Messages{unreadMsgCount > 0 && <span style={{marginLeft:".4rem",background:P.accent,color:"#fff",borderRadius:10,fontSize:".65rem",padding:"1px 6px",fontWeight:700,verticalAlign:"middle"}}>{unreadMsgCount}</span>}</button>
               </div>
             )}
 
@@ -2382,6 +2579,7 @@ export default function TutuTrade() {
                             <span className={`condition-pill condition-${conditionKey[l.condition]||"good"}`}>{l.condition}</span>
                           </div>
                           {l.sold && <div className="sold-overlay"><span className="sold-badge">Sold</span></div>}
+                          {l.seller_email === user?.email && l.expires_at && (() => { const d = Math.ceil((new Date(l.expires_at)-new Date())/86400000); if (d > 14) return null; return <div style={{position:"absolute",bottom:".6rem",left:".6rem",zIndex:2}}><span className={`expiry-badge ${d<=0?"expired":"warning"}`}>{d<=0?"Expired":`${d}d left`}</span></div>; })()}
                         </div>
                         <div className="card-body">
                           <div className="card-style-tag" style={{color:sc}}>{l.style}</div>
@@ -2404,6 +2602,11 @@ export default function TutuTrade() {
                                 ? <span style={{fontSize:".72rem",color:"#e07070",fontStyle:"italic"}}>Sold</span>
                                 : <button className="btn btn-sm" style={{background:"transparent",color:sc,border:`1px solid ${hexToRgba(sc,0.5)}`}} onClick={e=>{e.stopPropagation();setSelectedListing(l);setModal("detail");loadComments(l.id);setCommentText("");}}>View</button>
                               }
+                              {user && l.seller_email !== user.email && (
+                                <button className={`heart-btn ${favourites.find(f=>f.listing_id===l.id)?"active":""}`} onClick={e=>toggleFavourite(e,l.id)} title={favourites.find(f=>f.listing_id===l.id)?"Remove from saved":"Save item"}>
+                                  {favourites.find(f=>f.listing_id===l.id)?"❤":"🤍"}
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -2511,6 +2714,107 @@ export default function TutuTrade() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* ── FAVOURITES VIEW ── */}
+            {view === "favourites" && (
+              <div style={{paddingTop:"1.5rem"}}>
+                <div style={{marginBottom:"2rem",paddingBottom:"1.5rem",borderBottom:`1px solid ${P.border}`}}>
+                  <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"1.5rem",color:P.accentSoft,marginBottom:".3rem"}}>❤ Saved Items</h2>
+                  <p style={{fontSize:".82rem",color:P.muted}}>Listings you've saved for later.</p>
+                </div>
+                {favourites.length === 0 ? (
+                  <div className="empty-state"><div className="empty-state-icon">🤍</div><h3>No saved items yet</h3><p style={{marginTop:".5rem",fontSize:".83rem"}}>Tap the heart on any listing to save it here.</p></div>
+                ) : (
+                  <div className="grid">
+                    {favourites.map(fav => {
+                      const l = listings.find(li => li.id === fav.listing_id);
+                      if (!l) return null;
+                      const sc = getSchoolColor(l.school_id);
+                      const ratingInfo = getAvgRating(l.seller_email);
+                      return (
+                        <div key={fav.id} className="card" onClick={()=>{setSelectedListing(l);setModal("detail");loadComments(l.id);setCommentText("");}}>
+                          <div className="school-stripe" style={{background:sc}}/>
+                          <div className="card-image">
+                            {l.image||l.images?.[0]?<img src={l.image||l.images?.[0]} alt={l.title}/>:styleEmoji[l.style]||"👗"}
+                            {l.sold && <div className="sold-overlay"><span className="sold-badge">Sold</span></div>}
+                            <span className={`condition-pill condition-${conditionKey[l.condition]||"good"}`}>{l.condition}</span>
+                          </div>
+                          <div className="card-body">
+                            <div className="card-style-tag" style={{color:sc}}>{l.style}</div>
+                            <div className="card-title">{l.title}</div>
+                            <div className="card-meta">{l.size} · {l.seller_name}</div>
+                            {ratingInfo && <div className="star-row" style={{marginBottom:".35rem"}}><span className="star filled" style={{fontSize:".78rem"}}>★</span><span style={{fontSize:".72rem",color:P.muted,marginLeft:".2rem"}}>{ratingInfo.avg} ({ratingInfo.count})</span></div>}
+                            <div className="card-footer">
+                              <div><span className="price">£{l.price}</span></div>
+                              <button className="heart-btn active" onClick={e=>toggleFavourite(e,l.id)} title="Remove from saved">❤</button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── MESSAGES VIEW ── */}
+            {view === "messages" && (
+              <div style={{maxWidth:720,paddingTop:"1.5rem"}}>
+                <div style={{marginBottom:"1.5rem",paddingBottom:"1rem",borderBottom:`1px solid ${P.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div>
+                    <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"1.5rem",color:P.accentSoft,marginBottom:".3rem"}}>✉ Messages</h2>
+                    <p style={{fontSize:".82rem",color:P.muted}}>Direct messages with buyers and sellers.</p>
+                  </div>
+                  {activeConv && <button className="btn btn-ghost btn-sm" onClick={()=>{setActiveConv(null);setConvMessages([]);}}>← Back to inbox</button>}
+                </div>
+
+                {!activeConv ? (
+                  <div className="inbox-list">
+                    {conversations.length === 0 ? (
+                      <div className="empty-state"><div className="empty-state-icon">✉</div><h3>No messages yet</h3><p style={{marginTop:".5rem",fontSize:".83rem"}}>Click "Message seller" on a listing to start a conversation.</p></div>
+                    ) : conversations.map(conv => {
+                      const otherEmail = conv.buyer_email === user.email ? conv.seller_email : conv.buyer_email;
+                      const listing = listings.find(l => l.id === conv.listing_id);
+                      return (
+                        <div key={conv.id} className="inbox-item" onClick={async()=>{setActiveConv(conv);await loadMessages(conv.id);}}>
+                          <div className="inbox-item-title">{listing ? listing.title : "Listing removed"}</div>
+                          <div className="inbox-item-preview">{otherEmail}</div>
+                          <div className="inbox-item-meta">{new Date(conv.created_at).toLocaleDateString("en-GB")}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div>
+                    <div className="conv-header">
+                      {(() => {
+                        const listing = listings.find(l => l.id === activeConv.listing_id);
+                        const otherEmail = activeConv.buyer_email === user.email ? activeConv.seller_email : activeConv.buyer_email;
+                        return (
+                          <>
+                            {listing && <div style={{flex:1}}><div style={{fontSize:".88rem",color:P.text,fontWeight:500}}>{listing.title}</div><div style={{fontSize:".73rem",color:P.muted}}>£{listing.price}</div></div>}
+                            <div style={{fontSize:".78rem",color:P.muted}}>with {otherEmail}</div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                    <div className="conv-messages">
+                      {convMessages.length === 0 && <div style={{textAlign:"center",color:P.muted,fontSize:".8rem",paddingTop:"2rem"}}>No messages yet — say hello!</div>}
+                      {convMessages.map(msg => (
+                        <div key={msg.id} style={{display:"flex",flexDirection:"column",alignItems:msg.sender_email===user.email?"flex-end":"flex-start"}}>
+                          <div className={`msg-bubble ${msg.sender_email===user.email?"mine":"theirs"}`}>{msg.body}</div>
+                          <div className="msg-time">{new Date(msg.created_at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="msg-input-row">
+                      <input className="form-input" placeholder="Write a message..." value={newMessage} onChange={e=>setNewMessage(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMessage()} autoFocus/>
+                      <button className="btn btn-primary btn-sm" onClick={sendMessage}>Send</button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2907,7 +3211,10 @@ export default function TutuTrade() {
                 <div className="detail-price">£{selectedListing.price}</div>
                 <p className="detail-desc">{selectedListing.description||"No description provided."}</p>
                 <div className="seller-info">
-                  <div><strong>Seller:</strong> {selectedListing.seller_name}</div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:".35rem"}}>
+                    <div><strong>Seller:</strong> {selectedListing.seller_name}</div>
+                    {(() => { const r = getAvgRating(selectedListing.seller_email); return r ? <div className="star-row"><span className="star filled">★</span><span style={{fontSize:".73rem",color:P.muted,marginLeft:".2rem"}}>{r.avg} ({r.count} rating{r.count!==1?"s":""})</span></div> : null; })()}
+                  </div>
                   <div style={{marginTop:".18rem",fontSize:".73rem"}}>
                     📍 {selectedListing.school_id
                       ? <span style={{color:sc}}>{selectedListing.school_name}</span>
@@ -2941,6 +3248,43 @@ export default function TutuTrade() {
                   </a>
                 )}
                 {!user && <p style={{textAlign:"center",fontSize:".76rem",color:P.muted,marginTop:".7rem"}}><button className="text-link" onClick={()=>{setModal("auth");setAuthTab("login");}}>Sign in</button> to purchase</p>}
+                {/* Message seller */}
+                {user && !isOwner && !selectedListing.sold && (
+                  <button className="btn btn-ghost" style={{width:"100%",marginTop:".5rem"}} onClick={()=>startConversation(selectedListing)}>✉ Message seller</button>
+                )}
+                {/* Rate seller — only on sold listings for non-owners who haven't rated */}
+                {user && !isOwner && selectedListing.sold && !ratings.find(r=>r.listing_id===selectedListing.id&&r.buyer_email===user.email) && (
+                  <div style={{marginTop:"1rem",padding:".85rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:8}}>
+                    <div style={{fontSize:".78rem",fontWeight:500,color:P.text,marginBottom:".5rem"}}>Rate this seller</div>
+                    <StarPicker value={ratingForm.listingId===selectedListing.id?ratingForm.rating:0} onChange={v=>setRatingForm({rating:v,comment:"",listingId:selectedListing.id})}/>
+                    {ratingForm.listingId===selectedListing.id && ratingForm.rating > 0 && (
+                      <>
+                        <textarea className="form-textarea" style={{marginTop:".5rem",minHeight:56}} placeholder="Leave a comment (optional)..." value={ratingForm.comment} onChange={e=>setRatingForm(f=>({...f,comment:e.target.value}))}/>
+                        <button className="btn btn-primary btn-sm" style={{marginTop:".5rem",width:"100%"}} onClick={handleSubmitRating}>Submit rating</button>
+                      </>
+                    )}
+                  </div>
+                )}
+                {/* Show existing rating if already rated */}
+                {user && !isOwner && selectedListing.sold && ratings.find(r=>r.listing_id===selectedListing.id&&r.buyer_email===user.email) && (
+                  <div style={{marginTop:"1rem",padding:".7rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:8,fontSize:".78rem",color:P.muted,textAlign:"center"}}>
+                    ✓ You rated this seller {ratings.find(r=>r.listing_id===selectedListing.id&&r.buyer_email===user.email)?.rating} ★
+                  </div>
+                )}
+                {/* Renew listing for owner */}
+                {isOwner && (() => {
+                  const expiresAt = selectedListing.expires_at ? new Date(selectedListing.expires_at) : null;
+                  const daysLeft = expiresAt ? Math.ceil((expiresAt - new Date()) / 86400000) : null;
+                  if (!expiresAt || daysLeft > 14) return null;
+                  return (
+                    <div style={{marginTop:"1rem",padding:".75rem",background:daysLeft<=0?"rgba(224,112,112,.08)":"rgba(255,180,0,.07)",border:`1px solid ${daysLeft<=0?"rgba(224,112,112,.3)":"rgba(255,180,0,.25)"}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between",gap:"1rem"}}>
+                      <div style={{fontSize:".78rem",color:daysLeft<=0?"#e07070":"#ffb400"}}>
+                        {daysLeft<=0?"⚠ Your listing has expired":`⏳ Expires in ${daysLeft} day${daysLeft!==1?"s":""}`}
+                      </div>
+                      <button className="btn btn-sm btn-warning" onClick={()=>handleRenewListing(selectedListing.id)}>Renew</button>
+                    </div>
+                  );
+                })()}
 
                 {/* COMMENTS */}
                 {user && (
