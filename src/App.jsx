@@ -391,6 +391,25 @@ function getCSS(P) { return `
   .notif-item-time{font-size:.65rem;color:${P.muted};margin-top:.25rem;opacity:.75}
   .notif-empty{padding:2rem 1rem;text-align:center;color:${P.muted};font-size:.82rem}
 
+  /* FAIRY PANEL */
+  .fairy-panel{position:fixed;top:4.2rem;right:1rem;width:340px;max-height:82vh;display:flex;flex-direction:column;background:${P.surface};border:1px solid ${P.border};border-radius:12px;z-index:150;box-shadow:0 8px 32px rgba(0,0,0,.45);animation:slideUp .2s ease}
+  @media(max-width:400px){.fairy-panel{right:.5rem;left:.5rem;width:auto}}
+  .fairy-panel-header{padding:.6rem .85rem;border-bottom:1px solid ${P.border};display:flex;align-items:center;justify-content:space-between;background:${P.surface};border-radius:12px 12px 0 0;flex-shrink:0}
+  .fairy-tabs{display:flex;gap:.3rem}
+  .fairy-tab-btn{background:none;border:1px solid transparent;color:${P.muted};border-radius:6px;padding:.22rem .6rem;font-family:'Jost',sans-serif;font-size:.7rem;cursor:pointer;transition:all .2s;letter-spacing:.04em;text-transform:uppercase}
+  .fairy-tab-btn.active{border-color:${P.accent};color:${P.accent};background:rgba(201,169,110,.08)}
+  .fairy-chat-body{flex:1;overflow-y:auto;padding:.75rem 1rem;display:flex;flex-direction:column;gap:.6rem;min-height:0}
+  .fairy-greeting{padding:.7rem .9rem;background:rgba(201,169,110,.07);border:1px solid rgba(201,169,110,.2);border-radius:12px 12px 12px 2px;font-size:.82rem;color:${P.text};line-height:1.5}
+  .fairy-msg-user{align-self:flex-end;padding:.5rem .8rem;background:rgba(124,111,224,.15);border:1px solid rgba(124,111,224,.25);border-radius:12px 12px 2px 12px;font-size:.82rem;color:${P.text};max-width:88%;line-height:1.4;word-break:break-word}
+  .fairy-msg-fairy{align-self:flex-start;padding:.5rem .8rem;background:rgba(201,169,110,.07);border:1px solid rgba(201,169,110,.18);border-radius:12px 12px 12px 2px;font-size:.82rem;color:${P.text};max-width:95%;line-height:1.5;word-break:break-word}
+  .fairy-match-item{padding:.45rem .7rem;background:${P.card};border-radius:8px;margin-top:.35rem;cursor:pointer;border:1px solid ${P.border};transition:border-color .2s}
+  .fairy-match-item:hover{border-color:${P.accent}}
+  .fairy-match-title{font-size:.78rem;font-weight:500;color:${P.accentSoft}}
+  .fairy-match-meta{font-size:.69rem;color:${P.muted};margin-top:.1rem}
+  .fairy-searching{text-align:center;font-size:.76rem;color:${P.muted};padding:.35rem}
+  .fairy-input-row{padding:.55rem .75rem;border-top:1px solid ${P.border};display:flex;gap:.4rem;flex-shrink:0}
+  .fairy-input-row .form-input{flex:1;font-size:.82rem;padding:.4rem .65rem}
+
   /* PIXIE DUST */
   .pixie-canvas{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;}
 
@@ -722,7 +741,12 @@ export default function TutuTrade() {
   const [editingWanted, setEditingWanted] = useState(null);
   const [editingBoardPost, setEditingBoardPost] = useState(null);
   const [notifications, setNotifications] = useState([]);
-  const [showNotifications, setShowNotifications] = useState(false);
+  const [showFairyPanel, setShowFairyPanel] = useState(false);
+  const [fairyTab, setFairyTab] = useState("chat");
+  const [fairyName, setFairyName] = useState("Bella");
+  const [fairyMessages, setFairyMessages] = useState([]);
+  const [fairyChatInput, setFairyChatInput] = useState("");
+  const [fairySearching, setFairySearching] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -741,7 +765,7 @@ export default function TutuTrade() {
       if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); }
       else { setUserSchools([]); setIsAdmin(false); }
     });
-    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies(); loadCommentCounts(); loadWantedPosts();
+    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies(); loadCommentCounts(); loadWantedPosts(); loadFairyName();
     const ticker = setInterval(() => setTick(t => t + 1), 1000);
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
   }, []);
@@ -783,6 +807,7 @@ export default function TutuTrade() {
   const loadBoardReplies = async () => { const { data } = await supabase.from("board_replies").select("*").order("created_at"); if (data) setBoardReplies(data); };
   const loadWantedPosts = async () => { const { data } = await supabase.from("wanted_posts").select("*").order("created_at",{ascending:false}); if (data) setWantedPosts(data); };
   const loadCommission = async () => { const { data } = await supabase.from("settings").select("value").eq("key","commission_pct").single(); if (data) setCommissionPct(parseFloat(data.value)); };
+  const loadFairyName = async () => { const { data } = await supabase.from("settings").select("value").eq("key","fairy_name").single(); if (data) setFairyName(data.value); };
   const loadEvents = async () => { const { data } = await supabase.from("events").select("*").order("event_date"); if (data) setEvents(data); };
 
   const addDropdownItem = async (table, name, setter) => {
@@ -1363,9 +1388,74 @@ export default function TutuTrade() {
     await supabase.from("notifications").delete().in("id", ids);
   };
 
+  const fairySearch = async () => {
+    if (!fairyChatInput.trim() || fairySearching) return;
+    const query = fairyChatInput.trim();
+    setFairyChatInput("");
+    setFairyMessages(m => [...m, { role: "user", text: query }]);
+    setFairySearching(true);
+    let style = null, size = null, keywords = [], maxPrice = null, reply = null;
+    try {
+      const resp = await fetch("/.netlify/functions/fairy-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, styles: danceStyles, sizes }),
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        style = result.style || null;
+        size = result.size || null;
+        keywords = result.keywords || [];
+        maxPrice = result.maxPrice || null;
+        reply = result.reply || null;
+      }
+    } catch {}
+    if (!keywords.length && !style && !size) {
+      keywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    }
+    reply = reply || `Let me have a look around for you! ✨`;
+    const matches = listings.filter(l => {
+      if (l.sold) return false;
+      if (style && l.style !== style) return false;
+      if (size && l.size !== size) return false;
+      if (maxPrice && parseFloat(l.price) > maxPrice) return false;
+      if (keywords.length) {
+        const txt = `${l.title} ${l.description || ""} ${l.style || ""} ${l.size || ""}`.toLowerCase();
+        if (!keywords.some(k => txt.includes(k.toLowerCase()))) return false;
+      }
+      return true;
+    });
+    setFairyMessages(m => [...m, { role: "fairy", text: reply, matches }]);
+    if (user) {
+      if (matches.length > 0) {
+        await pushNotification(user.email, "fairy_found", `✨ ${fairyName} found ${matches.length} match${matches.length > 1 ? "es" : ""}!`, matches.slice(0, 3).map(l => l.title).join(", "));
+        await sendResendEmail({
+          to: user.email,
+          subject: `✨ ${fairyName} found something for you on TutuTrade!`,
+          html: emailTemplate(`✨ ${fairyName} found ${matches.length} match${matches.length > 1 ? "es" : ""}!`,
+            `<p style="color:#a892c4;margin-bottom:1rem">You searched for: <em style="color:#f0eaf8">"${query}"</em></p>
+            ${matches.slice(0, 5).map(l => `<div style="padding:.75rem 1rem;background:#1e1729;border-radius:8px;margin-bottom:.75rem;border-left:3px solid #c9a96e">
+              <strong style="color:#e8d5aa">${l.title}</strong><span style="color:#a892c4;margin-left:.6rem">£${l.price}</span>
+              ${l.style ? `<span style="color:#8a7a9e;font-size:.85em"> • ${l.style}</span>` : ""}${l.size ? `<span style="color:#8a7a9e;font-size:.85em"> • ${l.size}</span>` : ""}
+            </div>`).join("")}
+            <p style="color:#8a7a9e;font-size:.85em;margin-top:1rem">Visit TutuTrade to view the full listings!</p>`
+          ),
+        });
+      } else {
+        await supabase.from("wanted_posts").insert([{
+          user_email: user.email, user_name: userName,
+          title: query, dance_style: style || null, size: size || null,
+          description: `🧚 Fairy search: "${query}"`, school_id: null, fulfilled: false, images: [],
+        }]);
+        setFairyMessages(m => [...m.slice(0, -1), { ...m[m.length - 1], watchSaved: true }]);
+      }
+    }
+    setFairySearching(false);
+  };
+
   const handleNotificationClick = async (notif) => {
     await markNotificationRead(notif.id);
-    setShowNotifications(false);
+    setShowFairyPanel(false);
     if (notif.listing_id) {
       const listing = listings.find(l => l.id === notif.listing_id);
       if (listing) { setSelectedListing(listing); setModal("detail"); loadComments(listing.id); setCommentText(""); setView("browse"); }
@@ -1444,7 +1534,7 @@ export default function TutuTrade() {
         <div className="header-actions">
           <button className="theme-toggle" onClick={() => setDarkMode(d => !d)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>{darkMode ? "☀" : "🌙"}</button>
           {user && (() => { const unread = notifications.filter(n=>!n.read).length; return (
-            <button className={`notif-btn ${showNotifications?"open":""}`} onClick={() => setShowNotifications(s=>!s)} title="Notifications">
+            <button className={`notif-btn ${showFairyPanel?"open":""}`} onClick={() => { setShowFairyPanel(s=>!s); setFairyTab("chat"); }} title={`Ask ${fairyName}`}>
               🧚
               {unread > 0 && <span className="notif-badge">{unread > 9 ? "9+" : unread}</span>}
             </button>
@@ -1492,6 +1582,11 @@ export default function TutuTrade() {
 
             {adminTab === "overview" && (
               <div className="admin-section">
+                <div className="admin-section-title">🧚 Fairy Name</div>
+                <div style={{display:"flex",alignItems:"center",gap:"1rem",flexWrap:"wrap",padding:"1rem",background:"rgba(124,111,224,.06)",border:"1px solid rgba(124,111,224,.15)",borderRadius:8,marginBottom:"1.5rem"}}>
+                  <input className="form-input" value={fairyName} onChange={e=>setFairyName(e.target.value)} placeholder="Fairy name…" style={{maxWidth:200}}/>
+                  <button className="btn btn-primary btn-sm" onClick={async()=>{ await supabase.from("settings").upsert({key:"fairy_name",value:fairyName.trim()||"Bella"},{onConflict:"key"}); }}>Save</button>
+                </div>
                 <div className="admin-section-title">💰 Commission Rate</div>
                 <div style={{display:"flex",alignItems:"center",gap:"1rem",flexWrap:"wrap",padding:"1rem",background:"rgba(124,111,224,.06)",border:"1px solid rgba(124,111,224,.15)",borderRadius:8}}>
                   <label style={{fontSize:".82rem",color:P.muted}}>Platform fee:</label>
@@ -2429,29 +2524,88 @@ export default function TutuTrade() {
       </div>
 
       {/* NOTIFICATION PANEL */}
-      {showNotifications && (
+      {showFairyPanel && (
         <>
-          <div style={{position:"fixed",inset:0,zIndex:149}} onClick={() => setShowNotifications(false)}/>
-          <div className="notif-panel">
-            <div className="notif-panel-header">
-              <span className="notif-panel-title">🧚 Fairy Notifications</span>
-              <div style={{display:"flex",gap:".5rem",alignItems:"center"}}>
-                {notifications.some(n=>!n.read) && <button className="text-link" style={{fontSize:".7rem"}} onClick={markAllNotificationsRead}>Mark all read</button>}
-                {notifications.length > 0 && <button className="text-link" style={{fontSize:".7rem",color:"#e07070"}} onClick={clearAllNotifications}>Clear all</button>}
-                <button style={{background:"none",border:"none",color:P.muted,cursor:"pointer",fontSize:"1.1rem",lineHeight:1}} onClick={() => setShowNotifications(false)}>×</button>
+          <div style={{position:"fixed",inset:0,zIndex:149}} onClick={() => setShowFairyPanel(false)}/>
+          <div className="fairy-panel" onClick={e=>e.stopPropagation()}>
+            {/* Header with tabs */}
+            <div className="fairy-panel-header">
+              <div className="fairy-tabs">
+                <button className={`fairy-tab-btn ${fairyTab==="chat"?"active":""}`} onClick={()=>setFairyTab("chat")}>✨ {fairyName}</button>
+                <button className={`fairy-tab-btn ${fairyTab==="notifs"?"active":""}`} onClick={()=>setFairyTab("notifs")}>
+                  🔔 {notifications.filter(n=>!n.read).length > 0 ? `(${notifications.filter(n=>!n.read).length})` : "Notifications"}
+                </button>
               </div>
+              <button style={{background:"none",border:"none",color:P.muted,cursor:"pointer",fontSize:"1.1rem",lineHeight:1,padding:".1rem .2rem"}} onClick={()=>setShowFairyPanel(false)}>×</button>
             </div>
-            {notifications.length === 0 ? (
-              <div className="notif-empty">No notifications yet — your fairy is watching! 🧚</div>
-            ) : (
-              notifications.map(n => (
-                <div key={n.id} className={`notif-item ${n.read?"":"unread"}`} onClick={() => handleNotificationClick(n)} style={{position:"relative"}}>
-                  <button style={{position:"absolute",top:".35rem",right:".35rem",background:"none",border:"none",color:P.muted,cursor:"pointer",fontSize:".85rem",lineHeight:1,padding:"0 .15rem"}} onClick={e=>deleteNotification(e,n.id)} title="Remove">×</button>
-                  <div className="notif-item-title" style={{paddingRight:"1rem"}}>{n.title}</div>
-                  {n.body && <div className="notif-item-body">{n.body}</div>}
-                  <div className="notif-item-time">{new Date(n.created_at).toLocaleDateString("en-GB")} {new Date(n.created_at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</div>
+
+            {/* Chat tab */}
+            {fairyTab === "chat" && (
+              <>
+                <div className="fairy-chat-body">
+                  {fairyMessages.length === 0 && (
+                    <div className="fairy-greeting">Hi! I'm {fairyName} ✨ Tell me what you're looking for and I'll search the listings for you!</div>
+                  )}
+                  {fairyMessages.map((msg, i) => (
+                    msg.role === "user"
+                      ? <div key={i} className="fairy-msg-user">{msg.text}</div>
+                      : <div key={i} className="fairy-msg-fairy">
+                          <div>{msg.text}</div>
+                          {msg.matches && msg.matches.length > 0 && (
+                            <div style={{marginTop:".5rem"}}>
+                              <div style={{fontSize:".7rem",color:P.muted,marginBottom:".3rem"}}>Found {msg.matches.length} listing{msg.matches.length>1?"s":""}:</div>
+                              {msg.matches.map(l => (
+                                <div key={l.id} className="fairy-match-item" onClick={()=>{setSelectedListing(l);setModal("detail");loadComments(l.id);setCommentText("");setShowFairyPanel(false);}}>
+                                  <div className="fairy-match-title">{l.title} — £{l.price}</div>
+                                  <div className="fairy-match-meta">{[l.style,l.size,l.condition].filter(Boolean).join(" · ")}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {msg.matches && msg.matches.length === 0 && msg.watchSaved && (
+                            <div style={{fontSize:".72rem",color:P.muted,marginTop:".35rem"}}>I've saved this as a watch — I'll notify you when something matching comes in! 🧚</div>
+                          )}
+                        </div>
+                  ))}
+                  {fairySearching && <div className="fairy-searching">✨ Searching the listings…</div>}
                 </div>
-              ))
+                {!user ? (
+                  <div style={{padding:".65rem 1rem",borderTop:`1px solid ${P.border}`,fontSize:".76rem",color:P.muted,textAlign:"center"}}>
+                    <button className="text-link" onClick={()=>{setModal("auth");setAuthTab("login");setShowFairyPanel(false);}}>Sign in</button> to ask {fairyName}
+                  </div>
+                ) : (
+                  <div className="fairy-input-row">
+                    <input className="form-input" placeholder={`Ask ${fairyName}…`} value={fairyChatInput} onChange={e=>setFairyChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&fairySearch()} autoFocus/>
+                    <button className="btn btn-primary btn-sm" onClick={fairySearch} disabled={fairySearching}>✨</button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Notifications tab */}
+            {fairyTab === "notifs" && (
+              <>
+                <div style={{flex:1,overflowY:"auto",minHeight:0}}>
+                  {notifications.length === 0 ? (
+                    <div className="notif-empty">No notifications yet — {fairyName} is watching! 🧚</div>
+                  ) : (
+                    notifications.map(n => (
+                      <div key={n.id} className={`notif-item ${n.read?"":"unread"}`} onClick={()=>handleNotificationClick(n)} style={{position:"relative"}}>
+                        <button style={{position:"absolute",top:".35rem",right:".35rem",background:"none",border:"none",color:P.muted,cursor:"pointer",fontSize:".85rem",lineHeight:1,padding:"0 .15rem"}} onClick={e=>deleteNotification(e,n.id)} title="Remove">×</button>
+                        <div className="notif-item-title" style={{paddingRight:"1rem"}}>{n.title}</div>
+                        {n.body && <div className="notif-item-body">{n.body}</div>}
+                        <div className="notif-item-time">{new Date(n.created_at).toLocaleDateString("en-GB")} {new Date(n.created_at).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {notifications.length > 0 && (
+                  <div style={{padding:".5rem .85rem",borderTop:`1px solid ${P.border}`,display:"flex",gap:".5rem",flexShrink:0}}>
+                    {notifications.some(n=>!n.read) && <button className="text-link" style={{fontSize:".7rem"}} onClick={markAllNotificationsRead}>Mark all read</button>}
+                    <button className="text-link" style={{fontSize:".7rem",color:"#e07070"}} onClick={clearAllNotifications}>Clear all</button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </>
