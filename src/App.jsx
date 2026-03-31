@@ -791,7 +791,7 @@ export default function TutuTrade() {
   const [newPost, setNewPost] = useState({ title:"", message:"" });
   const [replyText, setReplyText] = useState({});
   const [expandedPost, setExpandedPost] = useState(null);
-  const [editForm, setEditForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[] });
+  const [editForm, setEditForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
   const [editError, setEditError] = useState("");
   const [adminTab, setAdminTab] = useState("overview");
   const [newDropdownItem, setNewDropdownItem] = useState({ danceStyle:"", size:"", condition:"" });
@@ -808,7 +808,7 @@ export default function TutuTrade() {
   const [lightboxImage, setLightboxImage] = useState(null);
   const [authForm, setAuthForm] = useState({ name:"", email:"", password:"", schoolCode:"" });
   const [authError, setAuthError] = useState("");
-  const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolId:"" });
+  const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
   const [createError, setCreateError] = useState("");
   const [editingAd, setEditingAd] = useState(null);
   const [adForm, setAdForm] = useState({ title:"", tagline:"", url:"", slot:"sidebar-top", scope:"global", school_id:null, active:true, image:null, sort_order:0 });
@@ -1186,11 +1186,12 @@ export default function TutuTrade() {
 
   const handleCreate = async () => {
     setCreateError("");
-    const { title, style, size, condition, price, schoolId } = createForm;
+    const { title, style, size, condition, price, schoolIds } = createForm;
     if (!title || !style || !size || !condition || !price) return setCreateError("Please fill in all required fields.");
     if (isNaN(price) || Number(price) <= 0) return setCreateError("Please enter a valid price.");
-    const isGeneral = schoolId === "general";
-    const school = isGeneral ? null : userSchools.find(s => s.school_id === schoolId);
+    const isGeneral = !schoolIds || schoolIds.length === 0;
+    const selectedSchools = isGeneral ? [] : userSchools.filter(s => schoolIds.includes(s.school_id));
+    const primarySchool = selectedSchools[0] || null;
     const { error } = await supabase.from("listings").insert([{
       title, style, size, condition, price: Number(price),
       description: createForm.description,
@@ -1199,15 +1200,16 @@ export default function TutuTrade() {
       seller_name: user.user_metadata?.full_name || user.email,
       seller_email: user.email,
       seller_paypal: user.user_metadata?.paypal_email || null,
-      school_name: isGeneral ? "General" : (school?.school_name || ""),
-      school_id: isGeneral ? null : (schoolId || null),
+      school_name: isGeneral ? "General" : selectedSchools.map(s => s.school_name).join(", "),
+      school_id: primarySchool?.school_id || null,
+      school_ids: isGeneral ? [] : schoolIds,
       expires_at: new Date(Date.now() + 60*24*60*60*1000).toISOString(),
     }]);
     if (error) return setCreateError("Failed to create listing. Please try again.");
     await loadListings();
     const { data: newListings } = await supabase.from("listings").select("*").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
     if (newListings?.[0]) await checkWishlistMatches(newListings[0]);
-    setCreateForm({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolId:"" });
+    setCreateForm({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
     closeModal(); setSuccess("Your listing is now live!");
   };
 
@@ -1308,6 +1310,7 @@ export default function TutuTrade() {
       description: listing.description || "",
       image: listing.image || null,
       images: listing.images || [],
+      schoolIds: listing.school_ids?.length ? listing.school_ids : (listing.school_id ? [listing.school_id] : []),
     });
     setEditError("");
     setModal("editListing");
@@ -1320,12 +1323,19 @@ export default function TutuTrade() {
     if (isNaN(price) || Number(price) <= 0) return setEditError("Please enter a valid price.");
     const oldPrice = selectedListing.price;
     const newPrice = Number(price);
+    const editSchoolIds = editForm.schoolIds || [];
+    const isGeneral = editSchoolIds.length === 0;
+    const selectedSchools = isGeneral ? [] : schools.filter(s => editSchoolIds.includes(s.id));
+    const primarySchool = selectedSchools[0] || null;
     const updates = {
       title, style, size, condition,
       price: newPrice,
       description: editForm.description,
       image: editForm.images?.[0] || editForm.image || null,
       images: editForm.images || [],
+      school_ids: editSchoolIds,
+      school_id: primarySchool?.id || null,
+      school_name: isGeneral ? "General" : selectedSchools.map(s => s.name).join(", "),
     };
     let query = supabase.from("listings").update(updates).eq("id", selectedListing.id);
     const { error } = await query;
@@ -1832,8 +1842,9 @@ export default function TutuTrade() {
   const filtered = listings.filter(l => {
     if (view === "mylistings") return l.seller_email === user?.email;
     if (!user) return false;
-    // Show general listings (no school) + listings from user's schools
-    if (l.school_id && !userSchoolIds.includes(l.school_id)) return false;
+    // Show general listings (no schools) + listings from any of user's schools
+    const lSchoolIds = l.school_ids?.length ? l.school_ids : (l.school_id ? [l.school_id] : []);
+    if (lSchoolIds.length > 0 && !lSchoolIds.some(id => userSchoolIds.includes(id))) return false;
     if (!showSold && l.sold) return false;
     const q = filters.search.toLowerCase();
     if (q && !l.title?.toLowerCase().includes(q) && !l.description?.toLowerCase().includes(q)) return false;
@@ -3289,13 +3300,26 @@ export default function TutuTrade() {
               {createError && <div className="form-error" style={{marginBottom:"1rem"}}>⚠ {createError}</div>}
               <div className="form-group"><label className="form-label">Item title *</label><input className="form-input" placeholder="e.g. Pink Ballet Tutu" value={createForm.title} onChange={e=>setCreateForm(f=>({...f,title:e.target.value}))}/></div>
               <div className="form-group">
-                <label className="form-label">Visibility *</label>
-                <select className="form-select" value={createForm.schoolId} onChange={e=>setCreateForm(f=>({...f,schoolId:e.target.value}))}>
-                  <option value="">Select...</option>
-                  <option value="general">🌐 General — visible to all TutuTrade members</option>
-                  {userSchools.map(us => <option key={us.school_id} value={us.school_id}>🏫 {us.school_name} only</option>)}
-                </select>
-                <div className="form-hint">General listings are visible to all logged-in users. School listings are only visible to that school's members.</div>
+                <label className="form-label">Publish to *</label>
+                <div style={{display:"flex",flexDirection:"column",gap:".4rem",padding:".6rem .85rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:7}}>
+                  <label style={{display:"flex",alignItems:"center",gap:".55rem",cursor:"pointer",fontSize:".84rem",color:createForm.schoolIds.length===0?P.accent:P.muted}}>
+                    <input type="checkbox" checked={createForm.schoolIds.length===0} onChange={()=>setCreateForm(f=>({...f,schoolIds:[]}))} style={{accentColor:P.accent}}/>
+                    🌐 General — visible to all TutuTrade members
+                  </label>
+                  {userSchools.map(us => (
+                    <label key={us.school_id} style={{display:"flex",alignItems:"center",gap:".55rem",cursor:"pointer",fontSize:".84rem",color:createForm.schoolIds.includes(us.school_id)?getSchoolColor(us.school_id):P.muted}}>
+                      <input type="checkbox" checked={createForm.schoolIds.includes(us.school_id)}
+                        onChange={e=>{
+                          const ids = e.target.checked
+                            ? [...createForm.schoolIds, us.school_id]
+                            : createForm.schoolIds.filter(id=>id!==us.school_id);
+                          setCreateForm(f=>({...f,schoolIds:ids}));
+                        }} style={{accentColor:getSchoolColor(us.school_id)}}/>
+                      🏫 {us.school_name}
+                    </label>
+                  ))}
+                </div>
+                <div className="form-hint">Tick one or more schools, or leave unticked for a general listing visible to everyone.</div>
               </div>
               <div className="form-row">
                 <div className="form-group"><label className="form-label">Dance style *</label><select className="form-select" value={createForm.style} onChange={e=>setCreateForm(f=>({...f,style:e.target.value}))}><option value="">Select...</option>{danceStyles.map(s=><option key={s}>{s}</option>)}</select></div>
@@ -3403,10 +3427,11 @@ export default function TutuTrade() {
                     {(() => { const r = getAvgRating(selectedListing.seller_email); return r ? <div className="star-row"><span className="star filled">★</span><span style={{fontSize:".73rem",color:P.muted,marginLeft:".2rem"}}>{r.avg} ({r.count} rating{r.count!==1?"s":""})</span></div> : null; })()}
                   </div>
                   <div style={{marginTop:".18rem",fontSize:".73rem"}}>
-                    📍 {selectedListing.school_id
-                      ? <span style={{color:sc}}>{selectedListing.school_name}</span>
-                      : <span className="general-badge">🌐 General listing</span>
-                    }
+                    📍 {(() => {
+                      const lIds = selectedListing.school_ids?.length ? selectedListing.school_ids : (selectedListing.school_id ? [selectedListing.school_id] : []);
+                      if (!lIds.length) return <span className="general-badge">🌐 General listing</span>;
+                      return lIds.map(id => { const s = getSchool(id); return s ? <span key={id} style={{color:s.color||P.accent,marginRight:".4rem"}}>🏫 {s.name}</span> : null; });
+                    })()}
                   </div>
                 </div>
                 {!isOwner && (
@@ -3536,6 +3561,28 @@ export default function TutuTrade() {
             <div className="modal-body">
               {editError && <div className="form-error" style={{marginBottom:"1rem"}}>⚠ {editError}</div>}
               <div className="form-group"><label className="form-label">Item title *</label><input className="form-input" value={editForm.title} onChange={e=>setEditForm(f=>({...f,title:e.target.value}))}/></div>
+              <div className="form-group">
+                <label className="form-label">Publish to</label>
+                <div style={{display:"flex",flexDirection:"column",gap:".4rem",padding:".6rem .85rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:7}}>
+                  <label style={{display:"flex",alignItems:"center",gap:".55rem",cursor:"pointer",fontSize:".84rem",color:(editForm.schoolIds||[]).length===0?P.accent:P.muted}}>
+                    <input type="checkbox" checked={(editForm.schoolIds||[]).length===0} onChange={()=>setEditForm(f=>({...f,schoolIds:[]}))} style={{accentColor:P.accent}}/>
+                    🌐 General — visible to all TutuTrade members
+                  </label>
+                  {schools.map(s => (
+                    <label key={s.id} style={{display:"flex",alignItems:"center",gap:".55rem",cursor:"pointer",fontSize:".84rem",color:(editForm.schoolIds||[]).includes(s.id)?(s.color||P.accent):P.muted}}>
+                      <input type="checkbox" checked={(editForm.schoolIds||[]).includes(s.id)}
+                        onChange={e=>{
+                          const ids = e.target.checked
+                            ? [...(editForm.schoolIds||[]), s.id]
+                            : (editForm.schoolIds||[]).filter(id=>id!==s.id);
+                          setEditForm(f=>({...f,schoolIds:ids}));
+                        }} style={{accentColor:s.color||P.accent}}/>
+                      🏫 {s.name}
+                    </label>
+                  ))}
+                </div>
+                <div className="form-hint">Tick one or more schools, or leave unticked for a general listing.</div>
+              </div>
               <div className="form-row">
                 <div className="form-group"><label className="form-label">Dance style *</label><select className="form-select" value={editForm.style} onChange={e=>setEditForm(f=>({...f,style:e.target.value}))}><option value="">Select...</option>{danceStyles.map(s=><option key={s}>{s}</option>)}</select></div>
                 <div className="form-group">
