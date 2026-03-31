@@ -557,7 +557,7 @@ function PixieDust() {
       // Wand particles
       for (let tutuWPI=tutuWandParticles.length-1;tutuWPI>=0;tutuWPI--){
         const tutuP=tutuWandParticles[tutuWPI];
-        tutuP.tutuVX*=0.99; tutuP.tutuVY*=0.98; tutuP.tutuVY-=0.015;
+        tutuP.tutuVX*=0.99; tutuP.tutuVY*=0.99; tutuP.tutuVY+=0.012;
         tutuP.tutuX+=tutuP.tutuVX; tutuP.tutuY+=tutuP.tutuVY; tutuP.tutuOpacity-=tutuP.tutuFade;
         if(tutuP.tutuOpacity<=0){tutuWandParticles.splice(tutuWPI,1);continue;}
         tutuDrawStar(tutuP.tutuX,tutuP.tutuY,tutuP.tutuSize,tutuP.tutuHue,tutuP.tutuOpacity);
@@ -587,13 +587,13 @@ function PixieDust() {
       const tutuEmitWand=(tutuCount,tutuFade)=>{
         for(let tutuEI=0;tutuEI<tutuCount;tutuEI++){
           const tutuA=Math.random()*Math.PI*2, tutuS=Math.random()*1.1+0.15;
-          tutuWandParticles.push({tutuX:tutuWTX+Math.random()*4-2,tutuY:tutuWTY+Math.random()*4-2,tutuVX:Math.cos(tutuA)*tutuS,tutuVY:Math.sin(tutuA)*tutuS-0.4,tutuSize:Math.random()*2+0.4,tutuOpacity:0.65+Math.random()*0.35,tutuFade:tutuFade+Math.random()*0.004,tutuHue:Math.random()*25+38});
+          tutuWandParticles.push({tutuX:tutuWTX+Math.random()*4-2,tutuY:tutuWTY+Math.random()*4-2,tutuVX:Math.cos(tutuA)*tutuS,tutuVY:Math.abs(Math.sin(tutuA)*tutuS)+0.5,tutuSize:Math.random()*2+0.4,tutuOpacity:0.65+Math.random()*0.35,tutuFade:tutuFade+Math.random()*0.004,tutuHue:Math.random()*25+38});
         }
       };
       if(tutuFairy.tutuState==="waving"){
         // Sweep across the top of the page
         const tutuWDX=tutuFairy.tutuTX-tutuFairy.tutuX;
-        tutuFairy.tutuX+=tutuWDX*0.012;
+        tutuFairy.tutuX+=tutuWDX*0.005;
         tutuFairy.tutuY=82+Math.sin(tutuFairy.tutuWobble)*5;
         if(tutuFrame%2===0) tutuEmitWand(3,0.005);
         if(Math.abs(tutuWDX)<12){const tutuNT=tutuNewTarget();tutuFairy.tutuTX=tutuNT.tutuX;tutuFairy.tutuTY=tutuNT.tutuY;tutuFairy.tutuState="flying";}
