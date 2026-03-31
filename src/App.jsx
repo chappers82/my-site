@@ -506,6 +506,20 @@ function getCSS(P) { return `
   .msg-time{font-size:.62rem;color:${P.muted};margin-top:.15rem}
   .msg-input-row{display:flex;gap:.5rem;margin-top:.5rem}
   .msg-input-row .form-input{flex:1}
+
+  /* ANALYTICS */
+  .analytics-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.75rem;margin-bottom:1.5rem}
+  .analytics-card{padding:1rem;background:rgba(124,111,224,.07);border:1px solid rgba(124,111,224,.18);border-radius:10px;text-align:center}
+  .analytics-card-value{font-family:'Playfair Display',serif;font-size:1.8rem;color:#a99ef0}
+  .analytics-card-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:${P.muted};margin-top:.2rem}
+  .bar-chart{display:flex;align-items:flex-end;gap:3px;height:80px;margin-top:.5rem}
+  .bar-chart-col{display:flex;flex-direction:column;align-items:center;flex:1;gap:2px}
+  .bar-chart-bar{width:100%;border-radius:3px 3px 0 0;min-height:2px;transition:height .3s}
+  .bar-chart-label{font-size:.55rem;color:${P.muted};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-align:center}
+  .analytics-section{margin-bottom:1.5rem}
+  .analytics-section-title{font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;color:${P.muted};margin-bottom:.65rem;font-weight:500}
+  .analytics-list-item{display:flex;align-items:center;justify-content:space-between;padding:.45rem .7rem;background:${P.card};border-radius:6px;margin-bottom:.35rem;font-size:.8rem}
+  .analytics-bar-inline{height:6px;border-radius:3px;background:rgba(124,111,224,.4);margin-top:.25rem}
 `; }
 
 function PixieDust() {
@@ -832,6 +846,9 @@ export default function TutuTrade() {
   const [convMessages, setConvMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
+  const [analyticsData, setAnalyticsData] = useState([]);
+  const [analyticsRange, setAnalyticsRange] = useState(7);
+  const searchTrackTimer = useRef(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -855,7 +872,7 @@ export default function TutuTrade() {
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
   }, []);
 
-  useEffect(() => { if (isAdmin) { loadAllUserSchools(); loadAllUsers(); } }, [isAdmin]);
+  useEffect(() => { if (isAdmin) { loadAllUserSchools(); loadAllUsers(); loadAnalytics(7); } }, [isAdmin]);
   useEffect(() => {
     if (!user) { setNotifications([]); return; }
     const loadNotifications = async () => {
@@ -883,6 +900,15 @@ export default function TutuTrade() {
       setWantedSchoolId(s => s === "general" ? userSchools[0].school_id : s);
     }
   }, [userSchools]);
+
+  useEffect(() => {
+    if (!filters.search || filters.search.length < 2) return;
+    if (searchTrackTimer.current) clearTimeout(searchTrackTimer.current);
+    searchTrackTimer.current = setTimeout(() => {
+      trackEvent("search", { query: filters.search, style: filters.style || null, size: filters.size || null });
+    }, 1500);
+    return () => clearTimeout(searchTrackTimer.current);
+  }, [filters.search]);
 
   const loadListings = async () => { const { data } = await supabase.from("listings").select("*").order("created_at",{ascending:false}); if (data) setListings(data); };
   const loadAds = async () => { const { data } = await supabase.from("ads").select("*").order("sort_order").order("created_at",{ascending:false}); if (data) setAds(data); };
@@ -1045,6 +1071,7 @@ export default function TutuTrade() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return setAuthError("Incorrect email or password.");
     closeModal();
+    try { await supabase.from("analytics_events").insert([{ event_type: "login", user_email: email, metadata: {} }]); } catch {}
   };
 
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setUserSchools([]); setIsAdmin(false); setView("browse"); };
@@ -1575,6 +1602,23 @@ export default function TutuTrade() {
     }
   };
 
+  // ── ANALYTICS ──
+  const trackEvent = async (eventType, metadata = {}) => {
+    try {
+      await supabase.from("analytics_events").insert([{
+        event_type: eventType,
+        user_email: user?.email || null,
+        metadata,
+      }]);
+    } catch {}
+  };
+  const loadAnalytics = async (days) => {
+    const d = days || analyticsRange;
+    const since = new Date(Date.now() - d * 24 * 60 * 60 * 1000).toISOString();
+    const { data } = await supabase.from("analytics_events").select("*").gte("created_at", since).order("created_at");
+    if (data) setAnalyticsData(data);
+  };
+
   // ── FAVOURITES ──
   const toggleFavourite = async (e, listingId) => {
     e.stopPropagation();
@@ -1678,6 +1722,7 @@ export default function TutuTrade() {
     setFairyChatInput("");
     setFairyMessages(m => [...m, { role: "user", text: query }]);
     setFairySearching(true);
+    trackEvent("fairy_search", { query });
     let style = null, size = null, keywords = [], maxPrice = null, reply = null;
     try {
       const resp = await fetch("/.netlify/functions/fairy-search", {
@@ -1737,12 +1782,20 @@ export default function TutuTrade() {
     setFairySearching(false);
   };
 
+  const openListingDetail = (listing) => {
+    setSelectedListing(listing);
+    setModal("detail");
+    loadComments(listing.id);
+    setCommentText("");
+    trackEvent("listing_view", { listing_id: listing.id, title: listing.title, style: listing.style, price: listing.price });
+  };
+
   const handleNotificationClick = async (notif) => {
     await markNotificationRead(notif.id);
     setShowFairyPanel(false);
     if (notif.listing_id) {
       const listing = listings.find(l => l.id === notif.listing_id);
-      if (listing) { setSelectedListing(listing); setModal("detail"); loadComments(listing.id); setCommentText(""); setView("browse"); }
+      if (listing) { openListingDetail(listing); setView("browse"); }
     }
   };
 
@@ -1875,7 +1928,7 @@ export default function TutuTrade() {
               <div className="admin-stat"><div className="admin-stat-value">£{totalRevenue.toFixed(2)}</div><div className="admin-stat-label">Est. Revenue</div></div>
             </div>
             <div className="admin-tabs">
-              {["overview","schools","events","users","ads","listings","dropdowns"].map(t => (
+              {["overview","schools","events","users","ads","listings","dropdowns","analytics"].map(t => (
                 <button key={t} className={`admin-tab ${adminTab===t?"active":""}`} onClick={() => setAdminTab(t)}>
                   {t.charAt(0).toUpperCase()+t.slice(1)}
                 </button>
@@ -2258,6 +2311,140 @@ export default function TutuTrade() {
                 </div>
               </div>
             )}
+
+            {adminTab === "analytics" && (() => {
+              // Process analytics data
+              const now = new Date();
+              const days = analyticsRange;
+
+              // Daily active users
+              const dauMap = {};
+              const viewsMap = {};
+              const labels = [];
+              for (let i = days-1; i >= 0; i--) {
+                const d = new Date(now - i*86400000);
+                const key = d.toLocaleDateString("en-GB",{day:"2-digit",month:"2-digit"});
+                labels.push(key);
+                dauMap[key] = new Set();
+                viewsMap[key] = 0;
+              }
+              analyticsData.forEach(e => {
+                const key = new Date(e.created_at).toLocaleDateString("en-GB",{day:"2-digit",month:"2-digit"});
+                if (dauMap[key] !== undefined) {
+                  if (e.user_email) dauMap[key].add(e.user_email);
+                  if (e.event_type === "listing_view") viewsMap[key]++;
+                }
+              });
+              const dauCounts = labels.map(l => dauMap[l]?.size || 0);
+              const viewCounts = labels.map(l => viewsMap[l] || 0);
+              const maxDau = Math.max(...dauCounts, 1);
+              const maxViews = Math.max(...viewCounts, 1);
+
+              // Top listings
+              const listingViews = {};
+              analyticsData.filter(e=>e.event_type==="listing_view").forEach(e => {
+                const id = e.metadata?.listing_id;
+                if (!id) return;
+                if (!listingViews[id]) listingViews[id] = { count: 0, title: e.metadata?.title || id };
+                listingViews[id].count++;
+              });
+              const topListings = Object.values(listingViews).sort((a,b)=>b.count-a.count).slice(0,8);
+              const maxListingViews = topListings[0]?.count || 1;
+
+              // Top searches
+              const searches = {};
+              analyticsData.filter(e=>e.event_type==="search"&&e.metadata?.query).forEach(e => {
+                const q = e.metadata.query.toLowerCase().trim();
+                searches[q] = (searches[q]||0)+1;
+              });
+              const topSearches = Object.entries(searches).sort((a,b)=>b[1]-a[1]).slice(0,8);
+              const maxSearchCount = topSearches[0]?.[1] || 1;
+
+              // Event type counts
+              const typeCounts = {};
+              analyticsData.forEach(e => { typeCounts[e.event_type] = (typeCounts[e.event_type]||0)+1; });
+              const uniqueUsers = new Set(analyticsData.filter(e=>e.user_email).map(e=>e.user_email)).size;
+              const totalLogins = typeCounts["login"] || 0;
+              const totalViews = typeCounts["listing_view"] || 0;
+              const totalSearches = typeCounts["search"] || 0;
+              const totalFairy = typeCounts["fairy_search"] || 0;
+
+              return (
+                <div className="admin-section">
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:".75rem",marginBottom:"1.25rem"}}>
+                    <div className="admin-section-title" style={{marginBottom:0}}>📊 Analytics</div>
+                    <div style={{display:"flex",gap:".4rem"}}>
+                      {[7,14,30].map(d => (
+                        <button key={d} className={`btn btn-sm ${analyticsRange===d?"btn-admin":"btn-ghost"}`} onClick={()=>{setAnalyticsRange(d);loadAnalytics(d);}}>{d}d</button>
+                      ))}
+                      <button className="btn btn-sm btn-admin" onClick={()=>loadAnalytics()}>↻</button>
+                    </div>
+                  </div>
+
+                  <div className="analytics-grid">
+                    <div className="analytics-card"><div className="analytics-card-value">{uniqueUsers}</div><div className="analytics-card-label">Unique users</div></div>
+                    <div className="analytics-card"><div className="analytics-card-value">{totalLogins}</div><div className="analytics-card-label">Logins</div></div>
+                    <div className="analytics-card"><div className="analytics-card-value">{totalViews}</div><div className="analytics-card-label">Listing views</div></div>
+                    <div className="analytics-card"><div className="analytics-card-value">{totalSearches}</div><div className="analytics-card-label">Searches</div></div>
+                    <div className="analytics-card"><div className="analytics-card-value">{totalFairy}</div><div className="analytics-card-label">Fairy searches</div></div>
+                    <div className="analytics-card"><div className="analytics-card-value">{analyticsData.length}</div><div className="analytics-card-label">Total events</div></div>
+                  </div>
+
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem",marginBottom:"1.5rem"}}>
+                    <div style={{padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10}}>
+                      <div className="analytics-section-title">Daily active users</div>
+                      <div className="bar-chart">
+                        {labels.map((l,i) => (
+                          <div key={l} className="bar-chart-col">
+                            <div className="bar-chart-bar" style={{height:`${(dauCounts[i]/maxDau)*68}px`,background:"rgba(124,111,224,.55)"}}/>
+                            <div className="bar-chart-label">{l}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10}}>
+                      <div className="analytics-section-title">Listing views per day</div>
+                      <div className="bar-chart">
+                        {labels.map((l,i) => (
+                          <div key={l} className="bar-chart-col">
+                            <div className="bar-chart-bar" style={{height:`${(viewCounts[i]/maxViews)*68}px`,background:"rgba(201,169,110,.55)"}}/>
+                            <div className="bar-chart-label">{l}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem"}}>
+                    <div>
+                      <div className="analytics-section-title">🔥 Most viewed listings</div>
+                      {topListings.length === 0 ? <div style={{fontSize:".78rem",color:P.muted}}>No data yet</div> : topListings.map((item,i) => (
+                        <div key={i} className="analytics-list-item">
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:".78rem",color:P.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+                            <div className="analytics-bar-inline" style={{width:`${(item.count/maxListingViews)*100}%`}}/>
+                          </div>
+                          <span style={{fontSize:".78rem",color:"#a99ef0",fontWeight:500,marginLeft:".5rem"}}>{item.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div>
+                      <div className="analytics-section-title">🔍 Top search terms</div>
+                      {topSearches.length === 0 ? <div style={{fontSize:".78rem",color:P.muted}}>No searches yet</div> : topSearches.map(([term, count], i) => (
+                        <div key={i} className="analytics-list-item">
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:".78rem",color:P.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>"{term}"</div>
+                            <div className="analytics-bar-inline" style={{width:`${(count/maxSearchCount)*100}%`,background:"rgba(201,169,110,.4)"}}/>
+                          </div>
+                          <span style={{fontSize:".78rem",color:P.accent,fontWeight:500,marginLeft:".5rem"}}>{count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
           </div>
 
         ) : view === "profile" && user ? (
@@ -2571,7 +2758,7 @@ export default function TutuTrade() {
                   ) : filtered.map(l => {
                     const sc = getSchoolColor(l.school_id);
                     return (
-                      <div className="card" key={l.id} style={{borderColor:hexToRgba(sc,0.25),opacity:l.sold?0.7:1}} onClick={() => { setSelectedListing(l); setModal("detail"); loadComments(l.id); setCommentText(""); }}>
+                      <div className="card" key={l.id} style={{borderColor:hexToRgba(sc,0.25),opacity:l.sold?0.7:1}} onClick={()=>openListingDetail(l)}>
                         <div className="school-stripe" style={{background:sc}}/>
                         <div className="card-image-wrap">
                           <div className="card-image" onClick={e=>{if(l.image){e.stopPropagation();setLightboxImage(l.image);}}}>
@@ -2600,7 +2787,7 @@ export default function TutuTrade() {
                               )}
                               {l.sold
                                 ? <span style={{fontSize:".72rem",color:"#e07070",fontStyle:"italic"}}>Sold</span>
-                                : <button className="btn btn-sm" style={{background:"transparent",color:sc,border:`1px solid ${hexToRgba(sc,0.5)}`}} onClick={e=>{e.stopPropagation();setSelectedListing(l);setModal("detail");loadComments(l.id);setCommentText("");}}>View</button>
+                                : <button className="btn btn-sm" style={{background:"transparent",color:sc,border:`1px solid ${hexToRgba(sc,0.5)}`}} onClick={e=>{e.stopPropagation();openListingDetail(l);}}>View</button>
                               }
                               {user && l.seller_email !== user.email && (
                                 <button className={`heart-btn ${favourites.find(f=>f.listing_id===l.id)?"active":""}`} onClick={e=>toggleFavourite(e,l.id)} title={favourites.find(f=>f.listing_id===l.id)?"Remove from saved":"Save item"}>
@@ -2734,7 +2921,7 @@ export default function TutuTrade() {
                       const sc = getSchoolColor(l.school_id);
                       const ratingInfo = getAvgRating(l.seller_email);
                       return (
-                        <div key={fav.id} className="card" onClick={()=>{setSelectedListing(l);setModal("detail");loadComments(l.id);setCommentText("");}}>
+                        <div key={fav.id} className="card" onClick={()=>openListingDetail(l)}>
                           <div className="school-stripe" style={{background:sc}}/>
                           <div className="card-image">
                             {l.image||l.images?.[0]?<img src={l.image||l.images?.[0]} alt={l.title}/>:styleEmoji[l.style]||"👗"}
@@ -3009,7 +3196,7 @@ export default function TutuTrade() {
                             <div style={{marginTop:".5rem"}}>
                               <div style={{fontSize:".7rem",color:P.muted,marginBottom:".3rem"}}>Found {msg.matches.length} listing{msg.matches.length>1?"s":""}:</div>
                               {msg.matches.map(l => (
-                                <div key={l.id} className="fairy-match-item" onClick={()=>{setSelectedListing(l);setModal("detail");loadComments(l.id);setCommentText("");setShowFairyPanel(false);}}>
+                                <div key={l.id} className="fairy-match-item" onClick={()=>{openListingDetail(l);setShowFairyPanel(false);}}>
                                   <div className="fairy-match-title">{l.title} — £{l.price}</div>
                                   <div className="fairy-match-meta">{[l.style,l.size,l.condition].filter(Boolean).join(" · ")}</div>
                                 </div>
@@ -3249,11 +3436,11 @@ export default function TutuTrade() {
                 )}
                 {!user && <p style={{textAlign:"center",fontSize:".76rem",color:P.muted,marginTop:".7rem"}}><button className="text-link" onClick={()=>{setModal("auth");setAuthTab("login");}}>Sign in</button> to purchase</p>}
                 {/* Message seller */}
-                {user && !isOwner && !selectedListing.sold && (
+                {user && user.email !== selectedListing.seller_email && !selectedListing.sold && (
                   <button className="btn btn-ghost" style={{width:"100%",marginTop:".5rem"}} onClick={()=>startConversation(selectedListing)}>✉ Message seller</button>
                 )}
                 {/* Rate seller — only on sold listings for non-owners who haven't rated */}
-                {user && !isOwner && selectedListing.sold && !ratings.find(r=>r.listing_id===selectedListing.id&&r.buyer_email===user.email) && (
+                {user && user.email !== selectedListing.seller_email && selectedListing.sold && !ratings.find(r=>r.listing_id===selectedListing.id&&r.buyer_email===user.email) && (
                   <div style={{marginTop:"1rem",padding:".85rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:8}}>
                     <div style={{fontSize:".78rem",fontWeight:500,color:P.text,marginBottom:".5rem"}}>Rate this seller</div>
                     <StarPicker value={ratingForm.listingId===selectedListing.id?ratingForm.rating:0} onChange={v=>setRatingForm({rating:v,comment:"",listingId:selectedListing.id})}/>
@@ -3266,7 +3453,7 @@ export default function TutuTrade() {
                   </div>
                 )}
                 {/* Show existing rating if already rated */}
-                {user && !isOwner && selectedListing.sold && ratings.find(r=>r.listing_id===selectedListing.id&&r.buyer_email===user.email) && (
+                {user && user.email !== selectedListing.seller_email && selectedListing.sold && ratings.find(r=>r.listing_id===selectedListing.id&&r.buyer_email===user.email) && (
                   <div style={{marginTop:"1rem",padding:".7rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:8,fontSize:".78rem",color:P.muted,textAlign:"center"}}>
                     ✓ You rated this seller {ratings.find(r=>r.listing_id===selectedListing.id&&r.buyer_email===user.email)?.rating} ★
                   </div>
