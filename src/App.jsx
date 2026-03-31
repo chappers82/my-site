@@ -457,18 +457,8 @@ function PixieDust() {
     const tutuResize = () => { tutuCanvas.width = window.innerWidth; tutuCanvas.height = window.innerHeight; };
     tutuResize();
 
-    // ── ONE-TIME DUST BURST from logo ──
-    const tutuDust = Array.from({length:60}, (_,tutuIdx) => ({
-      tutuX: 48+(Math.random()*20-10), tutuY: 36+(Math.random()*20-10),
-      tutuVX: Math.random()*0.7+0.1, tutuVY: Math.random()*0.3-0.08,
-      tutuAX: -0.0001, tutuAY: 0.009,
-      tutuSize: Math.random()*2.5+0.8,
-      tutuOpacity: Math.random()*0.6+0.4,
-      tutuFade: Math.random()*0.0003+0.00005,
-      tutuHue: Math.random()*25+38,
-      tutuDelay: tutuIdx*5, tutuDone: false,
-    }));
-    let tutuBurstDone = false;
+    // ── WAND PARTICLES (emitted continuously from wand tip) ──
+    const tutuWandParticles = [];
 
     // ── CLICK BURST ──
     const tutuBursts = [];
@@ -487,11 +477,6 @@ function PixieDust() {
     };
 
     // ── FAIRY ──
-    const tutuFairy = {
-      tutuX: 60, tutuY: 60, tutuTX: 200, tutuTY: 200,
-      tutuWing: 0, tutuWobble: 0, tutuTrail: [],
-      tutuState: "flying", tutuTimer: 0,
-    };
     const tutuNewTarget = () => {
       const tutuM = 80, tutuSide = Math.floor(Math.random()*4);
       if (tutuSide===0) return {tutuX:tutuM+Math.random()*(tutuCanvas.width-tutuM*2), tutuY:tutuM};
@@ -499,7 +484,12 @@ function PixieDust() {
       if (tutuSide===2) return {tutuX:tutuM+Math.random()*(tutuCanvas.width-tutuM*2), tutuY:tutuCanvas.height-tutuM};
       return {tutuX:tutuM, tutuY:tutuM+Math.random()*(tutuCanvas.height-tutuM*2)};
     };
-    const tutuT0 = tutuNewTarget(); tutuFairy.tutuTX = tutuT0.tutuX; tutuFairy.tutuTY = tutuT0.tutuY;
+    const tutuFairy = {
+      tutuX: tutuCanvas.width*0.55, tutuY: tutuCanvas.height*0.28,
+      tutuTX: 0, tutuTY: 0,
+      tutuWing: 0, tutuWobble: 0, tutuTrail: [],
+      tutuState: "waving", tutuTimer: 230,
+    };
 
     const tutuDrawStar = (tutuSX, tutuSY, tutuSZ, tutuSH, tutuSA) => {
       if (tutuSA<=0) return;
@@ -564,19 +554,13 @@ function PixieDust() {
       tutuCtx.clearRect(0,0,tutuCanvas.width,tutuCanvas.height);
       tutuFrame++;
 
-      // Dust burst
-      if (!tutuBurstDone) {
-        let tutuAlive=0;
-        tutuDust.forEach(tutuD => {
-          if (tutuD.tutuDone) return;
-          if (tutuD.tutuDelay>0) { tutuD.tutuDelay--; tutuAlive++; return; }
-          tutuD.tutuVX+=tutuD.tutuAX; tutuD.tutuVY+=tutuD.tutuAY;
-          tutuD.tutuX+=tutuD.tutuVX; tutuD.tutuY+=tutuD.tutuVY; tutuD.tutuOpacity-=tutuD.tutuFade;
-          if (tutuD.tutuOpacity<=0){tutuD.tutuDone=true;return;}
-          tutuAlive++;
-          tutuDrawStar(tutuD.tutuX,tutuD.tutuY,tutuD.tutuSize,tutuD.tutuHue,tutuD.tutuOpacity);
-        });
-        if (tutuAlive===0) tutuBurstDone=true;
+      // Wand particles
+      for (let tutuWPI=tutuWandParticles.length-1;tutuWPI>=0;tutuWPI--){
+        const tutuP=tutuWandParticles[tutuWPI];
+        tutuP.tutuVX*=0.99; tutuP.tutuVY*=0.98; tutuP.tutuVY-=0.015;
+        tutuP.tutuX+=tutuP.tutuVX; tutuP.tutuY+=tutuP.tutuVY; tutuP.tutuOpacity-=tutuP.tutuFade;
+        if(tutuP.tutuOpacity<=0){tutuWandParticles.splice(tutuWPI,1);continue;}
+        tutuDrawStar(tutuP.tutuX,tutuP.tutuY,tutuP.tutuSize,tutuP.tutuHue,tutuP.tutuOpacity);
       }
 
       // Click bursts
@@ -597,15 +581,29 @@ function PixieDust() {
 
       // Fairy movement
       tutuFairy.tutuWing+=0.25; tutuFairy.tutuWobble+=0.05;
-      if(tutuFairy.tutuState==="flying"){
+      // Wand tip world position (oscillates slightly for wave effect)
+      const tutuWTX=tutuFairy.tutuX+12+Math.sin(tutuFairy.tutuWing*1.6)*3;
+      const tutuWTY=tutuFairy.tutuY-9+Math.cos(tutuFairy.tutuWing*1.6)*2;
+      const tutuEmitWand=(tutuCount,tutuFade)=>{
+        for(let tutuEI=0;tutuEI<tutuCount;tutuEI++){
+          const tutuA=Math.random()*Math.PI*2, tutuS=Math.random()*1.1+0.15;
+          tutuWandParticles.push({tutuX:tutuWTX+Math.random()*4-2,tutuY:tutuWTY+Math.random()*4-2,tutuVX:Math.cos(tutuA)*tutuS,tutuVY:Math.sin(tutuA)*tutuS-0.4,tutuSize:Math.random()*2+0.4,tutuOpacity:0.65+Math.random()*0.35,tutuFade:tutuFade+Math.random()*0.004,tutuHue:Math.random()*25+38});
+        }
+      };
+      if(tutuFairy.tutuState==="waving"){
+        tutuFairy.tutuY+=Math.sin(tutuFairy.tutuWobble)*0.35;
+        if(tutuFrame%2===0) tutuEmitWand(3,0.005);
+        tutuFairy.tutuTimer--;
+        if(tutuFairy.tutuTimer<=0){const tutuNT=tutuNewTarget();tutuFairy.tutuTX=tutuNT.tutuX;tutuFairy.tutuTY=tutuNT.tutuY;tutuFairy.tutuState="flying";}
+      } else if(tutuFairy.tutuState==="flying"){
         const tutuDX=tutuFairy.tutuTX-tutuFairy.tutuX, tutuDY=tutuFairy.tutuTY-tutuFairy.tutuY;
         const tutuDist=Math.sqrt(tutuDX*tutuDX+tutuDY*tutuDY);
         if(tutuDist<10){tutuFairy.tutuState="hovering";tutuFairy.tutuTimer=100+Math.random()*100;}
         else{tutuFairy.tutuX+=(tutuDX/tutuDist)*0.7+Math.sin(tutuFairy.tutuWobble)*0.5;tutuFairy.tutuY+=(tutuDY/tutuDist)*0.7+Math.cos(tutuFairy.tutuWobble*0.7)*0.5;}
-        if(tutuFrame%22===0) tutuDrawStar(tutuFairy.tutuX+12,tutuFairy.tutuY-9,1.2,45,0.7);
+        if(tutuFrame%7===0) tutuEmitWand(1,0.012);
       } else {
         tutuFairy.tutuY+=Math.sin(tutuFairy.tutuWobble)*0.6; tutuFairy.tutuTimer--;
-        if(tutuFrame%15===0) tutuDrawStar(tutuFairy.tutuX+12+Math.random()*6-3,tutuFairy.tutuY-9+Math.random()*6-3,1.5,45,0.8);
+        if(tutuFrame%5===0) tutuEmitWand(1,0.01);
         if(tutuFairy.tutuTimer<=0){const tutuNT=tutuNewTarget();tutuFairy.tutuTX=tutuNT.tutuX;tutuFairy.tutuTY=tutuNT.tutuY;tutuFairy.tutuState="flying";}
       }
       tutuDrawFairy(tutuFairy.tutuX,tutuFairy.tutuY,tutuFairy.tutuWing);
