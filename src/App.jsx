@@ -1852,7 +1852,10 @@ export default function TutuTrade() {
     if (filters.size && l.size !== filters.size) return false;
     if (filters.condition && l.condition !== filters.condition) return false;
     if (filters.maxPrice && l.price > Number(filters.maxPrice)) return false;
-    if (filters.school && l.school_id !== filters.school) return false;
+    if (filters.school) {
+      const lIds = l.school_ids?.length ? l.school_ids : (l.school_id ? [l.school_id] : []);
+      if (!lIds.includes(filters.school)) return false;
+    }
     return true;
   });
 
