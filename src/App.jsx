@@ -17,6 +17,15 @@ function getLightP() { return {
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────
 const ADMIN_EMAIL = "grant.chaplin@hotmail.com";
+const DEFAULT_NOTIF_PREFS = {
+  new_comment:    { inapp: true,  email: true  },
+  comment_reply:  { inapp: true,  email: true  },
+  board_reply:    { inapp: false, email: true  },
+  wishlist_match: { inapp: true,  email: true  },
+  item_sold:      { inapp: true,  email: true  },
+  fairy_found:    { inapp: true,  email: true  },
+  new_user:       { inapp: true,  email: true  },
+};
 const SITE_URL = window.location.origin;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────
@@ -441,6 +450,19 @@ function getCSS(P) { return `
   .countdown-sep{font-size:1.2rem;color:${P.muted};opacity:.5;align-self:flex-start;padding-top:.35rem}
   .countdown-expired{font-size:.82rem;color:${P.muted};font-style:italic}
 
+  /* NOTIF PREFS TOGGLE */
+  .notif-pref-row{display:flex;align-items:center;justify-content:space-between;padding:.55rem 0;border-bottom:1px solid ${P.border};font-size:.82rem;color:${P.text}}
+  .notif-pref-row:last-child{border-bottom:none}
+  .notif-pref-label{flex:1}
+  .notif-pref-toggles{display:flex;gap:.75rem;align-items:center}
+  .toggle-wrap{display:flex;align-items:center;gap:.3rem;font-size:.72rem;color:${P.muted};cursor:pointer}
+  .toggle{position:relative;width:32px;height:18px;flex-shrink:0}
+  .toggle input{opacity:0;width:0;height:0;position:absolute}
+  .toggle-slider{position:absolute;inset:0;background:${P.border};border-radius:18px;transition:background .2s}
+  .toggle-slider:before{content:'';position:absolute;width:13px;height:13px;left:2.5px;top:2.5px;background:white;border-radius:50%;transition:transform .2s}
+  .toggle input:checked+.toggle-slider{background:${P.accent}}
+  .toggle input:checked+.toggle-slider:before{transform:translateX(14px)}
+
   /* ADMIN EVENTS */
   .event-item{display:flex;align-items:flex-start;justify-content:space-between;padding:.75rem;background:${P.card};border:1px solid ${P.border};border-radius:8px;margin-bottom:.5rem;gap:.75rem}
   .event-item-info{flex:1}
@@ -758,6 +780,7 @@ export default function TutuTrade() {
   const [editingBoardPost, setEditingBoardPost] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [showFairyPanel, setShowFairyPanel] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState(DEFAULT_NOTIF_PREFS);
   const [fairyTab, setFairyTab] = useState("chat");
   const [fairyName, setFairyName] = useState("Bella");
   const [fairyMessages, setFairyMessages] = useState([]);
@@ -773,13 +796,13 @@ export default function TutuTrade() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); }
+      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); }
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); }
-      else { setUserSchools([]); setIsAdmin(false); }
+      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); }
+      else { setUserSchools([]); setIsAdmin(false); setNotifPrefs(DEFAULT_NOTIF_PREFS); }
     });
     loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies(); loadCommentCounts(); loadWantedPosts(); loadFairyName();
     const ticker = setInterval(() => setTick(t => t + 1), 1000);
@@ -832,6 +855,21 @@ export default function TutuTrade() {
   const loadWantedPosts = async () => { const { data } = await supabase.from("wanted_posts").select("*").order("created_at",{ascending:false}); if (data) setWantedPosts(data); };
   const loadCommission = async () => { const { data } = await supabase.from("settings").select("value").eq("key","commission_pct").single(); if (data) setCommissionPct(parseFloat(data.value)); };
   const loadFairyName = async () => { const { data } = await supabase.from("settings").select("value").eq("key","fairy_name").single(); if (data) setFairyName(data.value); };
+  const loadNotifPrefs = async (email) => {
+    const { data } = await supabase.from("settings").select("value").eq("key", `notif_prefs_${email}`).single();
+    if (data?.value) { try { setNotifPrefs(p => ({...p, ...JSON.parse(data.value)})); } catch {} }
+  };
+  const saveNotifPref = async (type, channel, value) => {
+    const updated = {...notifPrefs, [type]: {...(notifPrefs[type] || {}), [channel]: value}};
+    setNotifPrefs(updated);
+    await supabase.from("settings").upsert({key:`notif_prefs_${user.email}`,value:JSON.stringify(updated)},{onConflict:"key"});
+  };
+  const getPrefsForEmail = async (email) => {
+    if (email === user?.email) return notifPrefs;
+    const { data } = await supabase.from("settings").select("value").eq("key", `notif_prefs_${email}`).single();
+    if (data?.value) { try { return {...DEFAULT_NOTIF_PREFS, ...JSON.parse(data.value)}; } catch {} }
+    return DEFAULT_NOTIF_PREFS;
+  };
   const loadEvents = async () => { const { data } = await supabase.from("events").select("*").order("event_date"); if (data) setEvents(data); };
 
   const addDropdownItem = async (table, name, setter) => {
@@ -912,6 +950,20 @@ export default function TutuTrade() {
     if (data.user) {
       await supabase.from("user_schools").insert([{ user_email: email, school_id: school.id, school_name: school.name, school_code: school.code }]);
       await loadUserSchools(email);
+      // Notify admin of new signup
+      const tutuAdminPrefs = await getPrefsForEmail(ADMIN_EMAIL);
+      if (tutuAdminPrefs.new_user?.inapp !== false) await pushNotification(ADMIN_EMAIL, "new_user", "🎉 New user signed up!", `${name} (${email}) joined ${school.name}`);
+      if (tutuAdminPrefs.new_user?.email !== false) await sendResendEmail({
+        to: ADMIN_EMAIL,
+        subject: `🎉 New user on TutuTrade — ${name}`,
+        html: emailTemplate("New user signed up!", `
+          <p style="color:#a892c4;margin-bottom:1rem"><strong style="color:#f0eaf8">${name}</strong> just joined TutuTrade.</p>
+          <div style="padding:.75rem 1rem;background:#1e1729;border-radius:8px;margin-bottom:.75rem;border-left:3px solid #c9a96e">
+            <div style="color:#e8d5aa;margin-bottom:.25rem">${email}</div>
+            <div style="color:#8a7a9e;font-size:.85em">School: ${school.name} (${school.code})</div>
+          </div>
+        `),
+      });
     }
     closeModal(); setSuccess(`Welcome, ${name}! You've joined ${school.name}.`);
     window.history.replaceState({}, '', window.location.pathname);
@@ -1069,7 +1121,8 @@ export default function TutuTrade() {
     const effectivePct = getCommission(listing?.school_id);
     if (listing) {
       await sendSoldEmail({ listing, commissionPct: effectivePct });
-      await pushNotification(listing.seller_email, "item_sold", "🎉 Your item sold!", `"${listing.title}" has been marked as sold for £${listing.price}`, listing.id);
+      const tutuSoldPrefs = await getPrefsForEmail(listing.seller_email);
+      if (tutuSoldPrefs.item_sold?.inapp !== false) await pushNotification(listing.seller_email, "item_sold", "🎉 Your item sold!", `"${listing.title}" has been marked as sold for £${listing.price}`, listing.id);
     }
     await loadListings(); closeModal(); setSuccess("Item marked as sold! Payout email sent to your inbox.");
   };
@@ -1212,8 +1265,9 @@ export default function TutuTrade() {
     setCommentText("");
     await loadCommentCounts();
     if (selectedListing.seller_email !== user.email) {
-      await pushNotification(selectedListing.seller_email, "new_comment", "💬 New question on your listing", `${userName}: "${commentText.trim()}"`, selectedListing.id);
-      await sendResendEmail({
+      const tutuCmtPrefs = await getPrefsForEmail(selectedListing.seller_email);
+      if (tutuCmtPrefs.new_comment?.inapp !== false) await pushNotification(selectedListing.seller_email, "new_comment", "💬 New question on your listing", `${userName}: "${commentText.trim()}"`, selectedListing.id);
+      if (tutuCmtPrefs.new_comment?.email !== false) await sendResendEmail({
         to: selectedListing.seller_email,
         subject: `💬 New question on your listing — ${selectedListing.title}`,
         html: emailTemplate("Someone asked a question!", `
@@ -1246,10 +1300,9 @@ export default function TutuTrade() {
     setCommentReplyText("");
     setReplyingTo(null);
     if (originalComment && originalComment.user_email !== user.email) {
-      await pushNotification(originalComment.user_email, "comment_reply", "↩ Reply to your question", `${userName}: "${commentReplyText.trim()}"`, selectedListing.id);
-    }
-    if (originalComment && originalComment.user_email !== user.email) {
-      await sendResendEmail({
+      const tutuRplyPrefs = await getPrefsForEmail(originalComment.user_email);
+      if (tutuRplyPrefs.comment_reply?.inapp !== false) await pushNotification(originalComment.user_email, "comment_reply", "↩ Reply to your question", `${userName}: "${commentReplyText.trim()}"`, selectedListing.id);
+      if (tutuRplyPrefs.comment_reply?.email !== false) await sendResendEmail({
         to: originalComment.user_email,
         subject: `↩ Someone replied to your question on TutuTrade`,
         html: emailTemplate("Your question got a reply!", `
@@ -1293,6 +1346,9 @@ export default function TutuTrade() {
     setReplyText(t => ({ ...t, [postId]:"" }));
     // Email the post author if someone else replied
     if (post && post.user_email !== user.email) {
+      const tutuBrdPrefs = await getPrefsForEmail(post.user_email);
+      if (tutuBrdPrefs.board_reply?.inapp !== false) await pushNotification(post.user_email, "board_reply", "↩ Reply to your board post", `${userName}: "${text.trim()}"`, null);
+      if (tutuBrdPrefs.board_reply?.email === false) return;
       await sendResendEmail({
         to: post.user_email,
         subject: `↩ Someone replied to your board post — ${post.title}`,
@@ -1382,7 +1438,8 @@ export default function TutuTrade() {
       const styleOk = !w.dance_style || w.dance_style === listing.style;
       const sizeOk = !w.size || w.size === listing.size;
       if (schoolOk && styleOk && sizeOk) {
-        await pushNotification(w.user_email, "wishlist_match", "🔍 Wishlist match!", `"${listing.title}" — ${[listing.style, listing.size].filter(Boolean).join(", ")} — £${listing.price}`, listing.id);
+        const tutuWlPrefs = await getPrefsForEmail(w.user_email);
+        if (tutuWlPrefs.wishlist_match?.inapp !== false) await pushNotification(w.user_email, "wishlist_match", "🔍 Wishlist match!", `"${listing.title}" — ${[listing.style, listing.size].filter(Boolean).join(", ")} — £${listing.price}`, listing.id);
       }
     }
   };
@@ -1463,8 +1520,8 @@ export default function TutuTrade() {
     setFairyMessages(m => [...m, { role: "fairy", text: reply, matches }]);
     if (user) {
       if (matches.length > 0) {
-        await pushNotification(user.email, "fairy_found", `✨ ${fairyName} found ${matches.length} match${matches.length > 1 ? "es" : ""}!`, matches.slice(0, 3).map(l => l.title).join(", "));
-        await sendResendEmail({
+        if (notifPrefs.fairy_found?.inapp !== false) await pushNotification(user.email, "fairy_found", `✨ ${fairyName} found ${matches.length} match${matches.length > 1 ? "es" : ""}!`, matches.slice(0, 3).map(l => l.title).join(", "));
+        if (notifPrefs.fairy_found?.email !== false) await sendResendEmail({
           to: user.email,
           subject: `✨ ${fairyName} found something for you on TutuTrade!`,
           html: emailTemplate(`✨ ${fairyName} found ${matches.length} match${matches.length > 1 ? "es" : ""}!`,
@@ -2086,6 +2143,41 @@ export default function TutuTrade() {
                     <input className="form-input" type="password" placeholder="Confirm new password" value={accountForm.confirmPassword} onChange={e=>setAccountForm(f=>({...f,confirmPassword:e.target.value}))}/>
                     <button className="btn btn-primary btn-sm" style={{alignSelf:"flex-start"}} onClick={handleUpdatePassword}>Update password</button>
                   </div>
+                </div>
+
+                {/* NOTIFICATION PREFERENCES */}
+                <div style={{padding:"1rem",background:P.surface,border:`1px solid ${P.border}`,borderRadius:10,marginBottom:".75rem"}}>
+                  <div className="form-label" style={{marginBottom:".75rem"}}>🔔 Notification Preferences</div>
+                  <div style={{display:"flex",justifyContent:"flex-end",gap:"1.5rem",fontSize:".7rem",color:P.muted,marginBottom:".35rem",paddingRight:".1rem"}}>
+                    <span>In-app</span><span>Email</span>
+                  </div>
+                  {[
+                    {key:"new_comment",    label:"New questions on my listings"},
+                    {key:"comment_reply",  label:"Replies to my questions"},
+                    {key:"board_reply",    label:"Board post replies"},
+                    {key:"wishlist_match", label:"Wanted list matches"},
+                    {key:"item_sold",      label:"My item sold"},
+                    {key:"fairy_found",    label:`${fairyName} search results`},
+                    ...(isAdmin ? [{key:"new_user", label:"New user signups"}] : []),
+                  ].map(({key, label}) => (
+                    <div key={key} className="notif-pref-row">
+                      <span className="notif-pref-label">{label}</span>
+                      <div className="notif-pref-toggles">
+                        <label className="toggle-wrap">
+                          <label className="toggle">
+                            <input type="checkbox" checked={notifPrefs[key]?.inapp !== false} onChange={e=>saveNotifPref(key,"inapp",e.target.checked)}/>
+                            <span className="toggle-slider"/>
+                          </label>
+                        </label>
+                        <label className="toggle-wrap">
+                          <label className="toggle">
+                            <input type="checkbox" checked={notifPrefs[key]?.email !== false} onChange={e=>saveNotifPref(key,"email",e.target.checked)}/>
+                            <span className="toggle-slider"/>
+                          </label>
+                        </label>
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 <div style={{padding:"1rem",background:"rgba(224,112,112,.05)",border:"1px solid rgba(224,112,112,.2)",borderRadius:10}}>
