@@ -2359,7 +2359,7 @@ export default function TutuTrade() {
               analyticsData.filter(e=>e.event_type==="listing_view").forEach(e => {
                 const id = e.metadata?.listing_id;
                 if (!id) return;
-                if (!listingViews[id]) listingViews[id] = { count: 0, title: e.metadata?.title || id };
+                if (!listingViews[id]) listingViews[id] = { count: 0, title: e.metadata?.title || id, id };
                 listingViews[id].count++;
               });
               const topListings = Object.values(listingViews).sort((a,b)=>b.count-a.count).slice(0,8);
