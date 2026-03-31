@@ -1388,6 +1388,13 @@ export default function TutuTrade() {
     await supabase.from("notifications").delete().in("id", ids);
   };
 
+  const clearFairyHistory = async () => {
+    setFairyMessages([]);
+    if (user) {
+      await supabase.from("wanted_posts").delete().eq("user_email", user.email).ilike("description", "🧚 Fairy search:%");
+    }
+  };
+
   const fairySearch = async () => {
     if (!fairyChatInput.trim() || fairySearching) return;
     const query = fairyChatInput.trim();
@@ -2542,6 +2549,11 @@ export default function TutuTrade() {
             {/* Chat tab */}
             {fairyTab === "chat" && (
               <>
+                {fairyMessages.length > 0 && (
+                  <div style={{padding:".3rem .85rem",borderBottom:`1px solid ${P.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}>
+                    <button className="text-link" style={{fontSize:".68rem",color:"#e07070"}} onClick={clearFairyHistory}>Clear history</button>
+                  </div>
+                )}
                 <div className="fairy-chat-body">
                   {fairyMessages.length === 0 && (
                     <div className="fairy-greeting">Hi! I'm {fairyName} ✨ Tell me what you're looking for and I'll search the listings for you!</div>
