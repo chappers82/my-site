@@ -709,7 +709,7 @@ function AdBanner({ ad }) {
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" style={{display:"block",position:"relative",marginBottom:"1.75rem",borderRadius:10,overflow:"hidden",textDecoration:"none"}}>
         <span style={{position:"absolute",top:".45rem",right:".6rem",fontSize:".58rem",textTransform:"uppercase",letterSpacing:".1em",color:"white",opacity:.7,background:"rgba(0,0,0,.4)",padding:".15rem .4rem",borderRadius:4}}>Ad</span>
-        <img src={ad.image} alt={ad.title} style={{width:"100%",height:90,objectFit:"contain",display:"block",background:"#1e1729"}}/>
+        <img src={ad.image} alt={ad.title} loading="lazy" decoding="async" style={{width:"100%",height:90,objectFit:"contain",display:"block",background:"#1e1729"}}/>
       </a>
     );
   }
@@ -738,7 +738,7 @@ function AdSidebarSlot({ ads, slot, schoolId }) {
         return (
           <a key={ad.id} className="ad-sidebar-card" href={href} target="_blank" rel="noopener noreferrer">
             <div className="ad-sidebar-label">Sponsored</div>
-            <div className="ad-sidebar-icon">{ad.image ? <img src={ad.image} alt={ad.title} style={{width:"100%",height:"100%",objectFit:"contain"}}/> : "🩰"}</div>
+            <div className="ad-sidebar-icon">{ad.image ? <img src={ad.image} alt={ad.title} loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : "🩰"}</div>
             <strong>{ad.title}</strong><br/><span>{ad.tagline}</span>
             <div className="ad-sidebar-cta">Visit →</div>
           </a>
@@ -757,7 +757,7 @@ function SchoolAdBanner({ ads, schoolId }) {
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" style={{display:"block",position:"relative",marginBottom:"1rem",borderRadius:10,overflow:"hidden",textDecoration:"none"}}>
         <span style={{position:"absolute",top:".45rem",right:".6rem",fontSize:".58rem",textTransform:"uppercase",letterSpacing:".1em",color:"white",opacity:.7,background:"rgba(0,0,0,.4)",padding:".15rem .4rem",borderRadius:4}}>Ad</span>
-        <img src={ad.image} alt={ad.title} style={{width:"100%",height:80,objectFit:"contain",display:"block",background:"#1e1729"}}/>
+        <img src={ad.image} alt={ad.title} loading="lazy" decoding="async" style={{width:"100%",height:80,objectFit:"contain",display:"block",background:"#1e1729"}}/>
       </a>
     );
   }
@@ -2863,7 +2863,7 @@ export default function TutuTrade() {
                         <div className="school-stripe" style={{background:sc}}/>
                         <div className="card-image-wrap">
                           <div className="card-image" onClick={e=>{if(l.image){e.stopPropagation();setLightboxImage(l.image);}}}>
-                            {l.image ? <img src={l.image} alt={l.title}/> : styleEmoji[l.style]||"👗"}
+                            {l.image ? <img src={l.image} alt={l.title} loading="lazy" decoding="async"/> : styleEmoji[l.style]||"👗"}
                             <span className={`condition-pill condition-${conditionKey[l.condition]||"good"}`}>{l.condition}</span>
                           </div>
                           {l.sold && <div className="sold-overlay"><span className="sold-badge">Sold</span></div>}
@@ -3026,7 +3026,7 @@ export default function TutuTrade() {
                         <div key={fav.id} className="card" onClick={()=>openListingDetail(l)}>
                           <div className="school-stripe" style={{background:sc}}/>
                           <div className="card-image">
-                            {l.image||l.images?.[0]?<img src={l.image||l.images?.[0]} alt={l.title}/>:styleEmoji[l.style]||"👗"}
+                            {l.image||l.images?.[0]?<img src={l.image||l.images?.[0]} alt={l.title} loading="lazy" decoding="async"/>:styleEmoji[l.style]||"👗"}
                             {l.sold && <div className="sold-overlay"><span className="sold-badge">Sold</span></div>}
                             <span className={`condition-pill condition-${conditionKey[l.condition]||"good"}`}>{l.condition}</span>
                           </div>
@@ -3257,7 +3257,7 @@ export default function TutuTrade() {
                           {post.images?.length > 0 && (
                             <div className="image-gallery" style={{marginTop:".5rem",marginBottom:".25rem"}}>
                               {post.images.map((img,i) => (
-                                <img key={i} src={img} alt="" style={{height:100,width:"auto",minWidth:100,objectFit:"cover",borderRadius:6,cursor:"zoom-in",flexShrink:0}} onClick={()=>setLightboxImage(img)}/>
+                                <img key={i} src={img} alt="" loading="lazy" decoding="async" style={{height:100,width:"auto",minWidth:100,objectFit:"cover",borderRadius:6,cursor:"zoom-in",flexShrink:0}} onClick={()=>setLightboxImage(img)}/>
                               ))}
                             </div>
                           )}
