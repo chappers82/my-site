@@ -130,7 +130,21 @@ function getCSS(P) { return `
   .logo-icon{width:34px;height:34px;background:linear-gradient(135deg,${P.accent},${P.pink});border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1rem}
   .logo-text{font-family:'Playfair Display',serif;font-size:1.35rem;color:${P.accentSoft};letter-spacing:.02em}
   .logo-sub{font-size:.62rem;color:${P.muted};letter-spacing:.15em;text-transform:uppercase;margin-top:-2px}
-  .header-actions{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+  .header-actions{display:flex;gap:.6rem;align-items:center;flex-wrap:nowrap}
+  .user-menu-wrap{position:relative}
+  .user-menu-panel{position:absolute;top:calc(100% + .4rem);right:0;background:${P.surface};border:1px solid ${P.border};border-radius:8px;min-width:150px;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.4);animation:slideUp .15s ease;overflow:hidden}
+  .user-menu-item{display:block;width:100%;padding:.6rem 1rem;background:none;border:none;text-align:left;font-family:'Jost',sans-serif;font-size:.82rem;color:${P.text};cursor:pointer;transition:background .15s;letter-spacing:.02em}
+  .user-menu-item:hover{background:${P.card}}
+  .header-hi{font-size:.78rem;color:${P.muted}}
+  .header-mobile-only{display:none}
+  @media(max-width:640px){
+    .header{padding:.7rem 1rem}
+    .logo-sub{display:none}
+    .logo-text{font-size:1.1rem}
+    .header-hi{display:none}
+    .header-desktop-only{display:none !important}
+    .header-mobile-only{display:block}
+  }
   .btn{padding:.5rem 1.1rem;border-radius:6px;font-family:'Jost',sans-serif;font-size:.8rem;font-weight:500;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .2s;border:none}
   .btn-primary{background:linear-gradient(135deg,${P.accent},#b8894e);color:#0d0a14;box-shadow:0 2px 12px rgba(201,169,110,.3)}
   .btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(201,169,110,.4)}
@@ -443,15 +457,15 @@ function PixieDust() {
     tutuResize();
 
     // ── ONE-TIME DUST BURST from logo ──
-    const tutuDust = Array.from({length:80}, (_,tutuIdx) => ({
+    const tutuDust = Array.from({length:60}, (_,tutuIdx) => ({
       tutuX: 48+(Math.random()*20-10), tutuY: 36+(Math.random()*20-10),
-      tutuVX: Math.random()*1.4+0.2, tutuVY: Math.random()*0.6-0.15,
-      tutuAX: -0.0001, tutuAY: 0.018,
+      tutuVX: Math.random()*0.7+0.1, tutuVY: Math.random()*0.3-0.08,
+      tutuAX: -0.0001, tutuAY: 0.009,
       tutuSize: Math.random()*2.5+0.8,
       tutuOpacity: Math.random()*0.6+0.4,
-      tutuFade: Math.random()*0.0005+0.0001,
+      tutuFade: Math.random()*0.0003+0.00005,
       tutuHue: Math.random()*25+38,
-      tutuDelay: tutuIdx*2.5, tutuDone: false,
+      tutuDelay: tutuIdx*5, tutuDone: false,
     }));
     let tutuBurstDone = false;
 
@@ -586,7 +600,7 @@ function PixieDust() {
         const tutuDX=tutuFairy.tutuTX-tutuFairy.tutuX, tutuDY=tutuFairy.tutuTY-tutuFairy.tutuY;
         const tutuDist=Math.sqrt(tutuDX*tutuDX+tutuDY*tutuDY);
         if(tutuDist<10){tutuFairy.tutuState="hovering";tutuFairy.tutuTimer=100+Math.random()*100;}
-        else{tutuFairy.tutuX+=(tutuDX/tutuDist)*1.2+Math.sin(tutuFairy.tutuWobble)*0.8;tutuFairy.tutuY+=(tutuDY/tutuDist)*1.2+Math.cos(tutuFairy.tutuWobble*0.7)*0.8;}
+        else{tutuFairy.tutuX+=(tutuDX/tutuDist)*0.7+Math.sin(tutuFairy.tutuWobble)*0.5;tutuFairy.tutuY+=(tutuDY/tutuDist)*0.7+Math.cos(tutuFairy.tutuWobble*0.7)*0.5;}
         if(tutuFrame%22===0) tutuDrawStar(tutuFairy.tutuX+12,tutuFairy.tutuY-9,1.2,45,0.7);
       } else {
         tutuFairy.tutuY+=Math.sin(tutuFairy.tutuWobble)*0.6; tutuFairy.tutuTimer--;
@@ -690,6 +704,7 @@ export default function TutuTrade() {
   const [allUsers, setAllUsers] = useState([]);
   const [commissionPct, setCommissionPct] = useState(1.5);
   const [view, setView] = useState("browse");
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [boardSchoolId, setBoardSchoolId] = useState("general");
   const [comments, setComments] = useState([]);
   const [commentCounts, setCommentCounts] = useState({});
@@ -775,7 +790,15 @@ export default function TutuTrade() {
     if (!user) { setNotifications([]); return; }
     const loadNotifications = async () => {
       const { data } = await supabase.from("notifications").select("*").eq("user_email", user.email).order("created_at", { ascending: false }).limit(60);
-      if (data) setNotifications(data);
+      if (data) {
+        const clearedAt = localStorage.getItem(`notif_cleared_${user.email}`);
+        const clearedIds = JSON.parse(localStorage.getItem(`notif_cleared_ids_${user.email}`) || "[]");
+        setNotifications(data.filter(n => {
+          if (clearedIds.includes(n.id)) return false;
+          if (clearedAt && new Date(n.created_at) <= new Date(clearedAt)) return false;
+          return true;
+        }));
+      }
     };
     loadNotifications();
     const channel = supabase.channel("user-notifications")
@@ -1378,11 +1401,16 @@ export default function TutuTrade() {
   const deleteNotification = async (e, id) => {
     e.stopPropagation();
     setNotifications(n => n.filter(x => x.id !== id));
+    const key = `notif_cleared_ids_${user.email}`;
+    const existing = JSON.parse(localStorage.getItem(key) || "[]");
+    localStorage.setItem(key, JSON.stringify([...existing, id]));
     await supabase.from("notifications").delete().eq("id", id).eq("user_email", user.email);
   };
 
   const clearAllNotifications = async () => {
     if (!notifications.length) return;
+    localStorage.setItem(`notif_cleared_${user.email}`, new Date().toISOString());
+    localStorage.removeItem(`notif_cleared_ids_${user.email}`);
     setNotifications([]);
     await supabase.from("notifications").delete().eq("user_email", user.email);
   };
@@ -1545,13 +1573,31 @@ export default function TutuTrade() {
               {unread > 0 && <span className="notif-badge">{unread > 9 ? "9+" : unread}</span>}
             </button>
           ); })()}
-          {isAdmin && <button className="btn btn-admin btn-sm" onClick={() => setView("admin")}>⚙ Admin</button>}
           {user ? (
             <>
-              <span style={{fontSize:".78rem",color:P.muted}}>Hi, {user.user_metadata?.full_name?.split(" ")[0] || user.email}</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setView("profile")}>My Profile</button>
-              <button className="btn btn-primary btn-sm" onClick={() => setModal("create")}>+ List Item</button>
-              <button className="btn btn-ghost btn-sm" onClick={handleLogout}>Sign out</button>
+              <span className="header-hi">Hi, {user.user_metadata?.full_name?.split(" ")[0] || user.email}</span>
+              <button className="btn btn-ghost btn-sm header-desktop-only" onClick={() => setView("profile")}>My Profile</button>
+              {isAdmin && <button className="btn btn-admin btn-sm header-desktop-only" onClick={() => setView("admin")}>⚙ Admin</button>}
+              <button className="btn btn-primary btn-sm" onClick={() => setModal("create")}>
+                + List<span className="header-desktop-only"> Item</span>
+              </button>
+              <button className="btn btn-ghost btn-sm header-desktop-only" onClick={handleLogout}>Sign out</button>
+              {/* Mobile-only user menu */}
+              <div className="user-menu-wrap header-mobile-only">
+                <button className="btn btn-ghost btn-sm" onClick={()=>setShowUserMenu(s=>!s)}>
+                  {user.user_metadata?.full_name?.split(" ")[0] || "Me"} ▾
+                </button>
+                {showUserMenu && (
+                  <>
+                    <div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setShowUserMenu(false)}/>
+                    <div className="user-menu-panel">
+                      <button className="user-menu-item" onClick={()=>{setView("profile");setShowUserMenu(false);}}>👤 My Profile</button>
+                      {isAdmin && <button className="user-menu-item" onClick={()=>{setView("admin");setShowUserMenu(false);}}>⚙ Admin</button>}
+                      <button className="user-menu-item" onClick={()=>{handleLogout();setShowUserMenu(false);}}>Sign out</button>
+                    </div>
+                  </>
+                )}
+              </div>
             </>
           ) : (
             <>
