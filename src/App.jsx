@@ -3438,7 +3438,7 @@ export default function TutuTrade() {
                     📍 {(() => {
                       const lIds = selectedListing.school_ids?.length ? selectedListing.school_ids : (selectedListing.school_id ? [selectedListing.school_id] : []);
                       if (!lIds.length) return <span className="general-badge">🌐 General listing</span>;
-                      return lIds.map(id => { const s = getSchool(id); return s ? <span key={id} style={{color:s.color||P.accent,marginRight:".4rem"}}>🏫 {s.name}</span> : null; });
+                      return <span className="general-badge">🏫 School listing</span>;
                     })()}
                   </div>
                 </div>
