@@ -28,6 +28,9 @@ const DEFAULT_NOTIF_PREFS = {
   price_drop:     { inapp: true,  email: true  },
   listing_expiring: { inapp: true, email: true },
   new_message:    { inapp: true,  email: true  },
+  offer_received: { inapp: true,  email: true  },
+  offer_update:   { inapp: true,  email: true  },
+  school_nudge:   { inapp: true,  email: false },
 };
 const SITE_URL = window.location.origin;
 
@@ -858,6 +861,11 @@ export default function TutuTrade() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTo, setComposeTo] = useState("");
   const [composeBody, setComposeBody] = useState("");
+  const [offers, setOffers] = useState([]);
+  const [offerForm, setOfferForm] = useState({ amount: "", message: "", listingId: null });
+  const [nudges, setNudges] = useState([]);
+  const [nudgeForm, setNudgeForm] = useState({ title: "", message: "", target_type: "all", target_school_id: "", channel: "both", send_at: "", expires_at: "" });
+  const [activeNudgeBanner, setActiveNudgeBanner] = useState(null);
   const searchTrackTimer = useRef(null);
   const pendingListingId = useRef(null);
   const pendingSchoolId = useRef(null);
@@ -870,20 +878,23 @@ export default function TutuTrade() {
     if (listingParam) pendingListingId.current = listingParam;
     const schoolParam = params.get("school");
     if (schoolParam) pendingSchoolId.current = schoolParam;
+    if (listingParam || schoolParam) {
+      sessionStorage.setItem("tt_share_source", listingParam ? `listing:${listingParam}` : `school:${schoolParam}`);
+    }
   }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadConversations(session.user.email); }
+      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadConversations(session.user.email); loadOffers(); }
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadConversations(session.user.email); }
+      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadConversations(session.user.email); loadOffers(); }
       else { setUserSchools([]); setIsAdmin(false); setNotifPrefs(DEFAULT_NOTIF_PREFS); setFavourites([]); setConversations([]); }
     });
-    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies(); loadCommentCounts(); loadWantedPosts(); loadFairyName(); loadRatings();
+    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies(); loadCommentCounts(); loadWantedPosts(); loadFairyName(); loadRatings(); loadNudges();
     const ticker = setInterval(() => setTick(t => t + 1), 1000);
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
   }, []);
@@ -1074,6 +1085,11 @@ export default function TutuTrade() {
     if (data.user) {
       await supabase.from("user_schools").insert([{ user_email: email, school_id: school.id, school_name: school.name, school_code: school.code }]);
       await loadUserSchools(email);
+      const shareSource = sessionStorage.getItem("tt_share_source");
+      if (shareSource) {
+        trackEvent("signup_from_share", { source: shareSource });
+        sessionStorage.removeItem("tt_share_source");
+      }
       // Notify admin of new signup
       const tutuAdminPrefs = await getPrefsForEmail(ADMIN_EMAIL);
       if (tutuAdminPrefs.new_user?.inapp !== false) await pushNotification(ADMIN_EMAIL, "new_user", "🎉 New user signed up!", `${name} (${email}) joined ${school.name}`);
@@ -1251,6 +1267,18 @@ export default function TutuTrade() {
       await sendSoldEmail({ listing, commissionPct: effectivePct });
       const tutuSoldPrefs = await getPrefsForEmail(listing.seller_email);
       if (tutuSoldPrefs.item_sold?.inapp !== false) await pushNotification(listing.seller_email, "item_sold", "🎉 Your item sold!", `"${listing.title}" has been marked as sold for £${listing.price}`, listing.id);
+      if (tutuSoldPrefs.item_sold?.email !== false) await sendResendEmail({
+        to: listing.seller_email,
+        subject: `🎉 Your item sold on TutuTrade — "${listing.title}"`,
+        html: emailTemplate("Your item sold! 🎉", `
+          <p style="color:#a892c4;margin-bottom:1rem">Great news! Your listing has been marked as sold.</p>
+          <div style="padding:1rem;background:#2d2142;border-left:3px solid #6fcf97;border-radius:6px;color:#f0eaf8;margin-bottom:1.25rem">
+            <strong style="font-size:1rem">${listing.title}</strong><br/>
+            <span style="color:#6fcf97;font-size:1.1rem;font-weight:700">£${listing.price}</span>
+          </div>
+          <p style="color:#a892c4">Log in to TutuTrade to manage your listings.</p>
+        `),
+      });
     }
     await loadListings(); closeModal(); setSuccess("Item marked as sold! Payout email sent to your inbox.");
   };
@@ -1601,6 +1629,19 @@ export default function TutuTrade() {
       if (schoolOk && styleOk && sizeOk) {
         const tutuWlPrefs = await getPrefsForEmail(w.user_email);
         if (tutuWlPrefs.wishlist_match?.inapp !== false) await pushNotification(w.user_email, "wishlist_match", "🔍 Wishlist match!", `"${listing.title}" — ${[listing.style, listing.size].filter(Boolean).join(", ")} — £${listing.price}`, listing.id);
+        if (tutuWlPrefs.wishlist_match?.email !== false) await sendResendEmail({
+          to: w.user_email,
+          subject: `🔍 A listing matches your wanted post on TutuTrade!`,
+          html: emailTemplate("Wishlist Match!", `
+            <p style="color:#a892c4;margin-bottom:1rem">Good news! A new listing matches something on your wanted list:</p>
+            <div style="padding:1rem;background:#2d2142;border-left:3px solid #c9a96e;border-radius:6px;color:#f0eaf8;margin-bottom:1.25rem">
+              <strong style="font-size:1rem">${listing.title}</strong><br/>
+              <span style="color:#a892c4;font-size:.85rem">${[listing.style, listing.size, listing.condition].filter(Boolean).join(" · ")}</span><br/>
+              <span style="color:#c9a96e;font-size:1.1rem;font-weight:700">£${listing.price}</span>
+            </div>
+            <p style="color:#a892c4">Visit TutuTrade to view this listing before it's gone!</p>
+          `),
+        });
       }
     }
   };
@@ -1684,11 +1725,13 @@ export default function TutuTrade() {
     return (r.reduce((s, x) => s + x.rating, 0) / r.length) >= 4.0;
   };
   const shareOnWhatsApp = (listing) => {
+    trackEvent("whatsapp_share", { listing_id: listing.id, type: "listing" });
     const url = `${SITE_URL}/?listing=${listing.id}`;
     const msg = `🩰 Check out this listing on TutuTrade!\n\n*${listing.title}*\n💰 £${listing.price}${listing.style ? `\n💃 ${listing.style}` : ""}${listing.size ? `\n📏 ${listing.size}` : ""}${listing.condition ? `\n✨ ${listing.condition}` : ""}\n\n👉 View listing: ${url}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
   };
   const shareSchoolOnWhatsApp = (school) => {
+    trackEvent("whatsapp_share", { school_id: school.id, type: "school" });
     const url = `${SITE_URL}/?school=${school.id}`;
     const msg = `🩰 *${school.name}* is on TutuTrade!\n\nBuy & sell pre-loved dancewear with other parents at our dance school — costumes, shoes, accessories and more.\n\n👉 Browse our school's shop: ${url}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
@@ -1798,6 +1841,124 @@ export default function TutuTrade() {
         <p style="color:#a892c4">Visit TutuTrade to reply.</p>
       `),
     });
+  };
+
+  // ── OFFERS ──
+  const loadOffers = async () => {
+    if (!user) return;
+    const { data } = await supabase.from("offers").select("*").or(`buyer_email.eq.${user.email},seller_email.eq.${user.email}`).order("created_at", { ascending: false });
+    if (data) setOffers(data);
+  };
+  const submitOffer = async () => {
+    if (!offerForm.amount || !offerForm.listingId) return;
+    const listing = listings.find(l => l.id === offerForm.listingId);
+    if (!listing) return;
+    const { data, error } = await supabase.from("offers").insert([{
+      listing_id: listing.id,
+      buyer_email: user.email,
+      seller_email: listing.seller_email,
+      amount: parseFloat(offerForm.amount),
+      message: offerForm.message || null,
+      status: "pending",
+    }]).select().single();
+    if (error) { setSuccess(""); return; }
+    setOfferForm({ amount: "", message: "", listingId: null });
+    setOffers(prev => [data, ...prev]);
+    const prefs = await getPrefsForEmail(listing.seller_email);
+    const buyerName = user.user_metadata?.full_name || user.email;
+    if (prefs.offer_received?.inapp !== false) await pushNotification(listing.seller_email, "offer_received", "💰 New offer on your listing!", `${buyerName} offered £${parseFloat(offerForm.amount).toFixed(2)} on "${listing.title}"`, listing.id);
+    if (prefs.offer_received?.email !== false) await sendResendEmail({
+      to: listing.seller_email,
+      subject: `💰 New offer on "${listing.title}" — TutuTrade`,
+      html: emailTemplate("You have a new offer!", `
+        <p style="color:#a892c4;margin-bottom:1rem"><strong style="color:#f0eaf8">${buyerName}</strong> made an offer on your listing:</p>
+        <div style="padding:1rem;background:#2d2142;border-left:3px solid #c9a96e;border-radius:6px;color:#f0eaf8;margin-bottom:1.25rem">
+          <strong>${listing.title}</strong> — Listed at £${listing.price}<br/>
+          <span style="color:#c9a96e;font-size:1.2rem;font-weight:700">Offer: £${parseFloat(offerForm.amount).toFixed(2)}</span>
+          ${offerForm.message ? `<p style="color:#a892c4;margin-top:.5rem;font-style:italic">"${offerForm.message}"</p>` : ""}
+        </div>
+        <p style="color:#a892c4">Log in to TutuTrade to accept or decline this offer.</p>
+      `),
+    });
+    setSuccess("Offer sent! The seller will be notified.");
+  };
+  const respondToOffer = async (offerId, status, counterAmount) => {
+    const offer = offers.find(o => o.id === offerId);
+    if (!offer) return;
+    const updates = { status };
+    if (status === "countered" && counterAmount) updates.counter_amount = parseFloat(counterAmount);
+    await supabase.from("offers").update(updates).eq("id", offerId);
+    setOffers(prev => prev.map(o => o.id === offerId ? { ...o, ...updates } : o));
+    const listing = listings.find(l => l.id === offer.listing_id);
+    const prefs = await getPrefsForEmail(offer.buyer_email);
+    const statusMsg = status === "accepted" ? "accepted ✅" : status === "declined" ? "declined ❌" : `countered with £${parseFloat(counterAmount).toFixed(2)} 🔄`;
+    if (prefs.offer_update?.inapp !== false) await pushNotification(offer.buyer_email, "offer_update", `💰 Offer ${status}`, `Your offer on "${listing?.title}" was ${statusMsg}`, offer.listing_id);
+    if (prefs.offer_update?.email !== false) await sendResendEmail({
+      to: offer.buyer_email,
+      subject: `💰 Your offer was ${status} — TutuTrade`,
+      html: emailTemplate(`Offer ${status}!`, `
+        <p style="color:#a892c4;margin-bottom:1rem">The seller has responded to your offer on <strong style="color:#f0eaf8">${listing?.title || "a listing"}</strong>.</p>
+        <div style="padding:1rem;background:#2d2142;border-left:3px solid #c9a96e;border-radius:6px;color:#f0eaf8;margin-bottom:1.25rem">
+          Your offer: £${offer.amount}<br/>
+          <strong style="color:${status==="accepted"?"#6fcf97":status==="declined"?"#e07070":"#c9a96e"}">${status === "accepted" ? "✅ Accepted!" : status === "declined" ? "❌ Declined" : `🔄 Counter offer: £${counterAmount}`}</strong>
+        </div>
+        <p style="color:#a892c4">Visit TutuTrade to ${status === "accepted" ? "arrange purchase" : "view details"}.</p>
+      `),
+    });
+  };
+
+  // ── NUDGES ──
+  const loadNudges = async () => {
+    const { data } = await supabase.from("nudges").select("*").order("created_at", { ascending: false });
+    if (data) setNudges(data);
+    // Show active nudge banner for this user
+    const now = new Date();
+    const active = data?.find(n => n.sent && (!n.expires_at || new Date(n.expires_at) > now) &&
+      (n.target_type === "all" || (n.target_type === "school" && userSchools.some(us => us.school_id === n.target_school_id))));
+    if (active) setActiveNudgeBanner(active);
+  };
+  const saveNudge = async () => {
+    const { title, message, target_type, target_school_id, channel, send_at, expires_at } = nudgeForm;
+    if (!title || !message) return;
+    const payload = {
+      title, message, target_type, channel,
+      target_school_id: target_type === "school" && target_school_id ? target_school_id : null,
+      send_at: send_at || new Date().toISOString(),
+      expires_at: expires_at || null,
+      sent: !send_at || new Date(send_at) <= new Date(),
+    };
+    const { data } = await supabase.from("nudges").insert([payload]).select().single();
+    if (data) {
+      setNudges(prev => [data, ...prev]);
+      setNudgeForm({ title: "", message: "", target_type: "all", target_school_id: "", channel: "both", send_at: "", expires_at: "" });
+      // If sending now, dispatch in-app + email
+      if (payload.sent) {
+        const { data: users } = await supabase.from("settings").select("key,value").like("key", "notif_prefs_%");
+        const { data: allUserSchools } = await supabase.from("user_schools").select("user_email, school_id");
+        // Get target emails
+        let targetEmails = [];
+        if (target_type === "all") {
+          targetEmails = [...new Set(allUserSchools?.map(u => u.user_email) || [])];
+        } else if (target_type === "school" && target_school_id) {
+          targetEmails = allUserSchools?.filter(u => u.school_id === target_school_id).map(u => u.user_email) || [];
+        }
+        for (const email of targetEmails.slice(0, 50)) { // cap at 50 for safety
+          const prefData = users?.find(u => u.key === `notif_prefs_${email}`);
+          const prefs = prefData ? { ...DEFAULT_NOTIF_PREFS, ...JSON.parse(prefData.value) } : DEFAULT_NOTIF_PREFS;
+          if (prefs.school_nudge?.inapp !== false) await supabase.from("notifications").insert([{ user_email: email, type: "school_nudge", title: `📣 ${title}`, body: message, listing_id: null }]);
+          if (channel !== "inapp" && prefs.school_nudge?.email !== false) await sendResendEmail({
+            to: email,
+            subject: `📣 ${title} — TutuTrade`,
+            html: emailTemplate(title, `<p style="color:#a892c4">${message}</p><p style="color:#a892c4;margin-top:1rem">Visit TutuTrade to browse the latest listings.</p>`),
+          });
+        }
+      }
+    }
+  };
+  const deleteNudge = async (id) => {
+    if (!window.confirm("Delete this nudge?")) return;
+    await supabase.from("nudges").delete().eq("id", id);
+    setNudges(prev => prev.filter(n => n.id !== id));
   };
 
   const fairySearch = async () => {
@@ -1999,6 +2160,17 @@ export default function TutuTrade() {
         </div>
       </header>
 
+      {/* Active nudge banner */}
+      {activeNudgeBanner && (
+        <div style={{background:"linear-gradient(135deg,rgba(124,111,224,.15),rgba(201,169,110,.1))",borderBottom:`1px solid rgba(201,169,110,.3)`,padding:".75rem 1.5rem",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"1rem",flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontSize:".85rem",fontWeight:500,color:P.accent}}>📣 {activeNudgeBanner.title}</div>
+            <div style={{fontSize:".78rem",color:P.muted,marginTop:".15rem"}}>{activeNudgeBanner.message}</div>
+          </div>
+          <button onClick={()=>setActiveNudgeBanner(null)} style={{background:"none",border:"none",cursor:"pointer",color:P.muted,fontSize:"1.1rem",flexShrink:0}}>✕</button>
+        </div>
+      )}
+
       <div className="main">
         {success && <div className="success-banner" onClick={() => setSuccess("")}>✓ {success}</div>}
 
@@ -2016,7 +2188,7 @@ export default function TutuTrade() {
               <div className="admin-stat"><div className="admin-stat-value">£{totalRevenue.toFixed(2)}</div><div className="admin-stat-label">Est. Revenue</div></div>
             </div>
             <div className="admin-tabs">
-              {["overview","schools","events","users","ads","listings","dropdowns","analytics"].map(t => (
+              {["overview","schools","events","users","ads","listings","dropdowns","analytics","nudges"].map(t => (
                 <button key={t} className={`admin-tab ${adminTab===t?"active":""}`} onClick={() => setAdminTab(t)}>
                   {t.charAt(0).toUpperCase()+t.slice(1)}
                 </button>
@@ -2478,6 +2650,30 @@ export default function TutuTrade() {
                     <div className="analytics-card"><div className="analytics-card-value">{analyticsData.length}</div><div className="analytics-card-label">Total events</div></div>
                   </div>
 
+                  {/* Sharing funnel */}
+                  {(() => {
+                    const shares = analyticsData.filter(e => e.event_type === "whatsapp_share").length;
+                    const opens = analyticsData.filter(e => e.event_type === "share_link_open").length;
+                    const signups = analyticsData.filter(e => e.event_type === "signup_from_share").length;
+                    return (
+                      <div style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:"1.25rem",marginBottom:"1.5rem"}}>
+                        <div style={{fontWeight:500,color:P.text,marginBottom:"1rem",fontSize:".9rem"}}>📲 WhatsApp Sharing Funnel</div>
+                        <div style={{display:"flex",gap:"1rem",flexWrap:"wrap"}}>
+                          {[{label:"Shares sent",value:shares,color:"#25D366"},{label:"Links opened",value:opens,color:P.accent},{label:"Signups from share",value:signups,color:"#6fcf97"}].map(({label,value,color})=>(
+                            <div key={label} style={{flex:1,minWidth:100,textAlign:"center",padding:".75rem",background:"rgba(0,0,0,.15)",borderRadius:8}}>
+                              <div style={{fontSize:"1.6rem",fontWeight:700,fontFamily:"'Playfair Display',serif",color}}>{value}</div>
+                              <div style={{fontSize:".68rem",color:P.muted,marginTop:".25rem",textTransform:"uppercase",letterSpacing:".06em"}}>{label}</div>
+                            </div>
+                          ))}
+                          {shares > 0 && <div style={{flex:1,minWidth:100,textAlign:"center",padding:".75rem",background:"rgba(0,0,0,.15)",borderRadius:8}}>
+                            <div style={{fontSize:"1.6rem",fontWeight:700,fontFamily:"'Playfair Display',serif",color:"#c9a96e"}}>{opens > 0 ? Math.round((signups/opens)*100) : 0}%</div>
+                            <div style={{fontSize:".68rem",color:P.muted,marginTop:".25rem",textTransform:"uppercase",letterSpacing:".06em"}}>Open → Signup rate</div>
+                          </div>}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:"1rem",marginBottom:"1.5rem"}}>
                     <div style={{padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10}}>
                       <div className="analytics-section-title">Daily active users</div>
@@ -2537,6 +2733,96 @@ export default function TutuTrade() {
                 </div>
               );
             })()}
+
+            {/* NUDGES TAB */}
+            {adminTab === "nudges" && (
+              <div>
+                <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:"1.15rem",color:P.accentSoft,marginBottom:"1.25rem"}}>📣 Nudges & Announcements</h3>
+                <p style={{fontSize:".82rem",color:P.muted,marginBottom:"1.5rem"}}>Send scheduled announcements to users. Set a send date to schedule ahead, and an expiry date to auto-remove in-app banners.</p>
+
+                {/* Create nudge form */}
+                <div style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:"1.25rem",marginBottom:"1.5rem"}}>
+                  <div style={{fontWeight:500,fontSize:".9rem",color:P.text,marginBottom:"1rem"}}>Create New Nudge</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:".75rem",marginBottom:".75rem"}}>
+                    <div>
+                      <label className="form-label">Title</label>
+                      <input className="form-input" placeholder="e.g. Show season is coming!" value={nudgeForm.title} onChange={e=>setNudgeForm(f=>({...f,title:e.target.value}))}/>
+                    </div>
+                    <div>
+                      <label className="form-label">Target audience</label>
+                      <select className="form-select" value={nudgeForm.target_type} onChange={e=>setNudgeForm(f=>({...f,target_type:e.target.value}))}>
+                        <option value="all">All users</option>
+                        <option value="school">Specific school</option>
+                        <option value="sellers">Sellers only</option>
+                      </select>
+                    </div>
+                  </div>
+                  {nudgeForm.target_type === "school" && (
+                    <div style={{marginBottom:".75rem"}}>
+                      <label className="form-label">School</label>
+                      <select className="form-select" value={nudgeForm.target_school_id} onChange={e=>setNudgeForm(f=>({...f,target_school_id:e.target.value}))}>
+                        <option value="">Select a school...</option>
+                        {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <div style={{marginBottom:".75rem"}}>
+                    <label className="form-label">Message</label>
+                    <textarea className="form-input" rows={3} placeholder="Your message to users..." value={nudgeForm.message} onChange={e=>setNudgeForm(f=>({...f,message:e.target.value}))} style={{resize:"vertical"}}/>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:".75rem",marginBottom:"1rem"}}>
+                    <div>
+                      <label className="form-label">Channel</label>
+                      <select className="form-select" value={nudgeForm.channel} onChange={e=>setNudgeForm(f=>({...f,channel:e.target.value}))}>
+                        <option value="both">In-app + Email</option>
+                        <option value="inapp">In-app only</option>
+                        <option value="email">Email only</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label">Send date (optional)</label>
+                      <input className="form-input" type="datetime-local" value={nudgeForm.send_at} onChange={e=>setNudgeForm(f=>({...f,send_at:e.target.value}))}/>
+                    </div>
+                    <div>
+                      <label className="form-label">Expires (optional)</label>
+                      <input className="form-input" type="datetime-local" value={nudgeForm.expires_at} onChange={e=>setNudgeForm(f=>({...f,expires_at:e.target.value}))}/>
+                    </div>
+                  </div>
+                  <button className="btn btn-primary btn-sm" onClick={saveNudge} style={{width:"100%"}}>
+                    {nudgeForm.send_at && new Date(nudgeForm.send_at) > new Date() ? "📅 Schedule Nudge" : "📣 Send Now"}
+                  </button>
+                </div>
+
+                {/* Existing nudges list */}
+                {nudges.length === 0 ? (
+                  <div className="empty-state"><div className="empty-state-icon">📣</div><h3>No nudges yet</h3><p style={{marginTop:".5rem",fontSize:".83rem"}}>Create your first announcement above.</p></div>
+                ) : nudges.map(nudge => {
+                  const now = new Date();
+                  const expired = nudge.expires_at && new Date(nudge.expires_at) < now;
+                  const scheduled = nudge.send_at && new Date(nudge.send_at) > now;
+                  return (
+                    <div key={nudge.id} style={{background:P.card,border:`1px solid ${expired?"rgba(224,112,112,.25)":scheduled?"rgba(255,180,0,.25)":P.border}`,borderRadius:10,padding:"1rem",marginBottom:".75rem",opacity:expired?0.6:1}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:".4rem"}}>
+                        <div>
+                          <div style={{fontWeight:500,color:P.text,fontSize:".9rem"}}>{nudge.title}</div>
+                          <div style={{fontSize:".72rem",color:P.muted,marginTop:".2rem"}}>
+                            {nudge.target_type === "school" ? `🏫 ${schools.find(s=>s.id===nudge.target_school_id)?.name||"School"}` : nudge.target_type === "sellers" ? "🏷 Sellers" : "👥 All users"}
+                            {" · "}{nudge.channel === "both" ? "In-app + Email" : nudge.channel === "inapp" ? "In-app" : "Email"}
+                            {nudge.send_at && ` · ${scheduled ? "📅 Scheduled: " : "Sent: "}${new Date(nudge.send_at).toLocaleDateString("en-GB")}`}
+                            {nudge.expires_at && ` · Expires: ${new Date(nudge.expires_at).toLocaleDateString("en-GB")}`}
+                          </div>
+                        </div>
+                        <div style={{display:"flex",gap:".4rem",alignItems:"center"}}>
+                          <span style={{fontSize:".65rem",padding:".15rem .5rem",borderRadius:10,background:expired?"rgba(224,112,112,.15)":scheduled?"rgba(255,180,0,.15)":"rgba(111,207,151,.15)",color:expired?"#e07070":scheduled?"#ffb400":"#6fcf97",fontWeight:500}}>{expired?"Expired":scheduled?"Scheduled":"Sent"}</span>
+                          <button onClick={()=>deleteNudge(nudge.id)} style={{background:"none",border:"none",cursor:"pointer",color:P.muted,fontSize:".9rem",padding:".2rem .4rem",borderRadius:4}} onMouseOver={e=>e.currentTarget.style.color="#e07070"} onMouseOut={e=>e.currentTarget.style.color=P.muted}>🗑</button>
+                        </div>
+                      </div>
+                      <div style={{fontSize:".8rem",color:P.muted}}>{nudge.message}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
           </div>
 
@@ -2633,6 +2919,9 @@ export default function TutuTrade() {
                     {key:"price_drop",     label:"💾 Price drop on saved item"},
                     {key:"new_message",    label:"✉ Direct messages"},
                     {key:"listing_expiring", label:"⏳ Listing expiring soon"},
+                    {key:"offer_received",   label:"💰 Offers on my listings"},
+                    {key:"offer_update",     label:"💰 My offer accepted/declined"},
+                    {key:"school_nudge",     label:"📣 School announcements"},
                     ...(isAdmin ? [{key:"new_user", label:"New user signups"}] : []),
                   ].map(({key, label}) => (
                     <div key={key} className="notif-pref-row">
@@ -2913,6 +3202,32 @@ export default function TutuTrade() {
               )}
             </div>
             </>)}
+
+            {/* ── MY LISTINGS: PENDING OFFERS ── */}
+            {view === "mylistings" && user && offers.filter(o => o.seller_email === user.email && o.status === "pending").length > 0 && (
+              <div style={{marginTop:"2rem"}}>
+                <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:"1.1rem",color:P.accentSoft,marginBottom:"1rem"}}>💰 Pending Offers</h3>
+                {offers.filter(o => o.seller_email === user.email && o.status === "pending").map(offer => {
+                  const listing = listings.find(l => l.id === offer.listing_id);
+                  return (
+                    <div key={offer.id} style={{background:P.card,border:"1px solid rgba(201,169,110,.3)",borderRadius:10,padding:"1rem",marginBottom:".75rem"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:".5rem",flexWrap:"wrap",gap:".5rem"}}>
+                        <div>
+                          <div style={{fontSize:".88rem",fontWeight:500,color:P.text}}>{listing?.title || "Listing removed"}</div>
+                          <div style={{fontSize:".73rem",color:P.muted}}>Listed at £{listing?.price} · Offer from {offer.buyer_email}</div>
+                        </div>
+                        <div style={{fontSize:"1.1rem",fontWeight:700,color:P.accent}}>£{offer.amount}</div>
+                      </div>
+                      {offer.message && <div style={{fontSize:".78rem",color:P.muted,fontStyle:"italic",marginBottom:".5rem"}}>"{offer.message}"</div>}
+                      <div style={{display:"flex",gap:".5rem",flexWrap:"wrap"}}>
+                        <button className="btn btn-sm" style={{background:"rgba(111,207,151,.15)",color:"#6fcf97",border:"1px solid rgba(111,207,151,.3)"}} onClick={()=>respondToOffer(offer.id,"accepted")}>✅ Accept</button>
+                        <button className="btn btn-sm" style={{background:"rgba(224,112,112,.1)",color:"#e07070",border:"1px solid rgba(224,112,112,.25)"}} onClick={()=>respondToOffer(offer.id,"declined")}>❌ Decline</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* ── BOARD VIEW ── */}
             {view === "board" && (
@@ -3584,6 +3899,32 @@ export default function TutuTrade() {
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                   Share on WhatsApp
                 </button>
+                {/* Make an offer */}
+                {user && user.email !== selectedListing.seller_email && !selectedListing.sold && (() => {
+                  const existingOffer = offers.find(o => o.listing_id === selectedListing.id && o.buyer_email === user.email && o.status === "pending");
+                  const acceptedOffer = offers.find(o => o.listing_id === selectedListing.id && o.buyer_email === user.email && o.status === "accepted");
+                  return existingOffer ? (
+                    <div style={{marginTop:".5rem",padding:".65rem",background:"rgba(201,169,110,.08)",border:"1px solid rgba(201,169,110,.25)",borderRadius:8,fontSize:".78rem",color:P.muted,textAlign:"center"}}>
+                      💰 Offer of £{existingOffer.amount} pending...
+                    </div>
+                  ) : acceptedOffer ? (
+                    <div style={{marginTop:".5rem",padding:".65rem",background:"rgba(111,207,151,.08)",border:"1px solid rgba(111,207,151,.3)",borderRadius:8,fontSize:".78rem",color:"#6fcf97",textAlign:"center"}}>
+                      ✅ Your offer of £{acceptedOffer.amount} was accepted!
+                    </div>
+                  ) : offerForm.listingId === selectedListing.id ? (
+                    <div style={{marginTop:".5rem",padding:".85rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:8}}>
+                      <div style={{fontSize:".8rem",fontWeight:500,color:P.text,marginBottom:".5rem"}}>💰 Make an offer</div>
+                      <input className="form-input" type="number" placeholder={`Offer price (listed at £${selectedListing.price})`} value={offerForm.amount} onChange={e=>setOfferForm(f=>({...f,amount:e.target.value}))} style={{marginBottom:".5rem"}}/>
+                      <input className="form-input" placeholder="Message to seller (optional)" value={offerForm.message} onChange={e=>setOfferForm(f=>({...f,message:e.target.value}))} style={{marginBottom:".5rem"}}/>
+                      <div style={{display:"flex",gap:".5rem"}}>
+                        <button className="btn btn-primary btn-sm" style={{flex:1}} onClick={submitOffer}>Send offer</button>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>setOfferForm({amount:"",message:"",listingId:null})}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button className="btn btn-ghost" style={{width:"100%",marginTop:".5rem",borderColor:"rgba(201,169,110,.4)",color:P.accent}} onClick={()=>setOfferForm(f=>({...f,listingId:selectedListing.id}))}>💰 Make an offer</button>
+                  );
+                })()}
                 {/* Message seller */}
                 {user && user.email !== selectedListing.seller_email && !selectedListing.sold && (
                   <button className="btn btn-ghost" style={{width:"100%",marginTop:".5rem"}} onClick={()=>startConversation(selectedListing)}>✉ Message seller</button>
