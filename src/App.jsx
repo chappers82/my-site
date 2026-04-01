@@ -222,9 +222,17 @@ function getCSS(P) { return `
   .filter-select option{background:${P.card}}
 
   /* NAV */
-  .nav-pills{display:flex;gap:.5rem;margin-bottom:2rem;flex-wrap:wrap;padding-top:.5rem}
-  .nav-pill{padding:.5rem 1.25rem;border-radius:20px;background:transparent;border:1px solid ${P.border};color:${P.muted};font-family:'Jost',sans-serif;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .2s}
+  .nav-pills{display:flex;gap:.4rem;margin-bottom:2rem;flex-wrap:wrap;padding-top:.5rem}
+  .nav-pill{padding:.45rem 1rem;border-radius:20px;background:transparent;border:1px solid ${P.border};color:${P.muted};font-family:'Jost',sans-serif;font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;transition:all .2s;white-space:nowrap}
   .nav-pill.active{background:rgba(201,169,110,.12);border-color:${P.accent};color:${P.accent}}
+  @media(max-width:480px){
+    .nav-pills{gap:.3rem}
+    .nav-pill{padding:.38rem .75rem;font-size:.67rem}
+    .main{padding:1rem .75rem}
+    .filters{gap:.4rem}
+    .admin-tabs{gap:.3rem}
+    .admin-tab{padding:.38rem .65rem;font-size:.68rem}
+  }
 
   /* GRID & CARDS */
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1.1rem}
@@ -801,7 +809,7 @@ export default function TutuTrade() {
   const [newPost, setNewPost] = useState({ title:"", message:"" });
   const [replyText, setReplyText] = useState({});
   const [expandedPost, setExpandedPost] = useState(null);
-  const [editForm, setEditForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
+  const [editForm, setEditForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[], expires_at:"" });
   const [editError, setEditError] = useState("");
   const [adminTab, setAdminTab] = useState("overview");
   const [newDropdownItem, setNewDropdownItem] = useState({ danceStyle:"", size:"", condition:"" });
@@ -858,6 +866,8 @@ export default function TutuTrade() {
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
   const [analyticsData, setAnalyticsData] = useState([]);
   const [analyticsRange, setAnalyticsRange] = useState(7);
+  const [analyticsSnapshots, setAnalyticsSnapshots] = useState([]);
+  const [showSnapshots, setShowSnapshots] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTo, setComposeTo] = useState("");
   const [composeBody, setComposeBody] = useState("");
@@ -1368,6 +1378,7 @@ export default function TutuTrade() {
       image: listing.image || null,
       images: listing.images || [],
       schoolIds: listing.school_ids?.length ? listing.school_ids : (listing.school_id ? [listing.school_id] : []),
+      expires_at: listing.expires_at ? new Date(listing.expires_at).toISOString().slice(0,10) : "",
     });
     setEditError("");
     setModal("editListing");
@@ -1393,6 +1404,7 @@ export default function TutuTrade() {
       school_ids: editSchoolIds,
       school_id: primarySchool?.id || null,
       school_name: isGeneral ? "General" : selectedSchools.map(s => s.name).join(", "),
+      ...(editForm.expires_at ? { expires_at: new Date(editForm.expires_at).toISOString(), expired: false, expiry_warned: false } : {}),
     };
     let query = supabase.from("listings").update(updates).eq("id", selectedListing.id);
     const { error } = await query;
@@ -1697,6 +1709,22 @@ export default function TutuTrade() {
     const since = new Date(Date.now() - d * 24 * 60 * 60 * 1000).toISOString();
     const { data } = await supabase.from("analytics_events").select("*").gte("created_at", since).order("created_at");
     if (data) setAnalyticsData(data);
+  };
+  const loadSnapshots = async () => {
+    const { data } = await supabase.from("settings").select("key,value").like("key","analytics_snapshot_%").order("key",{ascending:false});
+    if (data) setAnalyticsSnapshots(data.map(d => ({ key: d.key, ...JSON.parse(d.value) })));
+  };
+  const saveSnapshot = async (stats) => {
+    const key = `analytics_snapshot_${new Date().toISOString().replace(/[:.]/g,"-")}`;
+    const snap = { ...stats, saved_at: new Date().toISOString(), range: analyticsRange };
+    await supabase.from("settings").upsert({ key, value: JSON.stringify(snap) }, { onConflict:"key" });
+    await loadSnapshots();
+    setSuccess("Snapshot saved! Raw data is preserved — this is just a point-in-time record.");
+  };
+  const deleteSnapshot = async (key) => {
+    if (!window.confirm("Delete this snapshot?")) return;
+    await supabase.from("settings").delete().eq("key", key);
+    setAnalyticsSnapshots(prev => prev.filter(s => s.key !== key));
   };
 
   // ── FAVOURITES ──
@@ -2494,26 +2522,41 @@ export default function TutuTrade() {
             {adminTab === "listings" && (
               <div className="admin-section">
                 <div className="admin-section-title">📋 All Listings</div>
-                <table className="admin-table">
-                  <thead><tr><th>Item</th><th>Seller</th><th>School</th><th>Price</th><th>Your fee</th><th>Status</th><th></th></tr></thead>
-                  <tbody>
-                    {listings.map(l => { const eff = getCommission(l.school_id); const { commission } = calcFees(l.price, eff); const sc = getSchoolColor(l.school_id); return (
-                      <tr key={l.id} style={{opacity:l.sold?0.6:1}}>
-                        <td>{l.sold && <span style={{fontSize:".65rem",color:"#e07070",marginRight:".4rem"}}>[SOLD]</span>}{l.title}</td><td style={{color:P.muted}}>{l.seller_name}</td>
-                        <td><span style={{padding:".18rem .55rem",borderRadius:20,fontSize:".65rem",background:hexToRgba(sc,0.12),color:sc,border:`1px solid ${hexToRgba(sc,0.3)}`}}>{l.school_name}</span></td>
-                        <td>£{l.price}</td><td style={{color:P.accentSoft}}>£{commission}</td>
-                        <td>
+                {!listings.length && <div style={{color:P.muted,textAlign:"center",padding:"1.5rem"}}>No listings</div>}
+                {listings.map(l => {
+                  const eff = getCommission(l.school_id);
+                  const { commission } = calcFees(l.price, eff);
+                  const sc = getSchoolColor(l.school_id);
+                  const expiresAt = l.expires_at ? new Date(l.expires_at) : null;
+                  const daysLeft = expiresAt ? Math.ceil((expiresAt - new Date()) / 86400000) : null;
+                  return (
+                    <div key={l.id} style={{background:P.card,border:`1px solid ${l.sold?"rgba(224,112,112,.2)":P.border}`,borderRadius:10,padding:".85rem 1rem",marginBottom:".6rem",opacity:l.sold?0.7:1}}>
+                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:".75rem",flexWrap:"wrap"}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:500,color:P.text,fontSize:".88rem",marginBottom:".2rem"}}>
+                            {l.sold && <span style={{fontSize:".65rem",color:"#e07070",marginRight:".4rem",fontWeight:400}}>[SOLD]</span>}
+                            {l.title}
+                          </div>
+                          <div style={{fontSize:".73rem",color:P.muted,display:"flex",flexWrap:"wrap",gap:".5rem",alignItems:"center"}}>
+                            <span>{l.seller_name}</span>
+                            <span style={{padding:".1rem .45rem",borderRadius:20,background:hexToRgba(sc,0.12),color:sc,border:`1px solid ${hexToRgba(sc,0.3)}`}}>{l.school_name||"General"}</span>
+                            <span style={{color:P.accent}}>£{l.price}</span>
+                            <span style={{color:P.accentSoft}}>fee £{commission}</span>
+                            {daysLeft !== null && daysLeft <= 14 && <span style={{color:daysLeft<=0?"#e07070":"#ffb400",fontSize:".65rem"}}>{daysLeft<=0?"Expired":`⏳ ${daysLeft}d left`}</span>}
+                          </div>
+                        </div>
+                        <div style={{display:"flex",gap:".4rem",flexWrap:"wrap",flexShrink:0}}>
+                          <button className="btn btn-ghost btn-sm" onClick={()=>{setSelectedListing(l);openEditListing(l);}}>✏ Edit</button>
                           {l.sold
-                            ? <button className="btn btn-ghost btn-sm" onClick={() => handleMarkUnsold(l.id)}>Relist</button>
-                            : <button className="btn btn-success btn-sm" onClick={() => handleMarkSold(l.id)}>Mark sold</button>
+                            ? <button className="btn btn-ghost btn-sm" onClick={()=>handleMarkUnsold(l.id)}>Relist</button>
+                            : <button className="btn btn-success btn-sm" onClick={()=>handleMarkSold(l.id)}>Mark sold</button>
                           }
-                        </td>
-                        <td><button className="btn btn-danger btn-sm" onClick={() => handleDelete(l.id)}>Remove</button></td>
-                      </tr>
-                    );})}
-                    {!listings.length && <tr><td colSpan={7} style={{color:P.muted,textAlign:"center",padding:"1.5rem"}}>No listings</td></tr>}
-                  </tbody>
-                </table>
+                          <button className="btn btn-danger btn-sm" onClick={()=>handleDelete(l.id)}>Remove</button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -2633,11 +2676,12 @@ export default function TutuTrade() {
                 <div className="admin-section">
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:".75rem",marginBottom:"1.25rem"}}>
                     <div className="admin-section-title" style={{marginBottom:0}}>📊 Analytics</div>
-                    <div style={{display:"flex",gap:".4rem"}}>
+                    <div style={{display:"flex",gap:".4rem",flexWrap:"wrap"}}>
                       {[7,14,30].map(d => (
                         <button key={d} className={`btn btn-sm ${analyticsRange===d?"btn-admin":"btn-ghost"}`} onClick={()=>{setAnalyticsRange(d);loadAnalytics(d);}}>{d}d</button>
                       ))}
                       <button className="btn btn-sm btn-admin" onClick={()=>loadAnalytics()}>↻</button>
+                      <button className="btn btn-sm btn-ghost" onClick={()=>{setShowSnapshots(s=>!s);loadSnapshots();}} title="View saved snapshots">🗂 Snapshots</button>
                     </div>
                   </div>
 
@@ -2657,9 +2701,12 @@ export default function TutuTrade() {
                     const signups = analyticsData.filter(e => e.event_type === "signup_from_share").length;
                     return (
                       <div style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:"1.25rem",marginBottom:"1.5rem"}}>
-                        <div style={{fontWeight:500,color:P.text,marginBottom:"1rem",fontSize:".9rem"}}>📲 WhatsApp Sharing Funnel</div>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1rem",flexWrap:"wrap",gap:".5rem"}}>
+                          <div style={{fontWeight:500,color:P.text,fontSize:".9rem"}}>📲 WhatsApp Sharing Funnel</div>
+                          <button className="btn btn-sm btn-ghost" onClick={()=>saveSnapshot({uniqueUsers,totalLogins,totalViews,totalSearches,totalFairy,totalEvents:analyticsData.length,shares,opens,signups})}>📸 Save snapshot</button>
+                        </div>
                         <div style={{display:"flex",gap:"1rem",flexWrap:"wrap"}}>
-                          {[{label:"Shares sent",value:shares,color:"#25D366"},{label:"Links opened",value:opens,color:P.accent},{label:"Signups from share",value:signups,color:"#6fcf97"}].map(({label,value,color})=>(
+                          {[{label:"Shares sent",value:shares,color:"#128C7E"},{label:"Links opened",value:opens,color:P.accent},{label:"Signups from share",value:signups,color:"#6fcf97"}].map(({label,value,color})=>(
                             <div key={label} style={{flex:1,minWidth:100,textAlign:"center",padding:".75rem",background:"rgba(0,0,0,.15)",borderRadius:8}}>
                               <div style={{fontSize:"1.6rem",fontWeight:700,fontFamily:"'Playfair Display',serif",color}}>{value}</div>
                               <div style={{fontSize:".68rem",color:P.muted,marginTop:".25rem",textTransform:"uppercase",letterSpacing:".06em"}}>{label}</div>
@@ -2673,6 +2720,28 @@ export default function TutuTrade() {
                       </div>
                     );
                   })()}
+
+                  {/* Snapshots panel */}
+                  {showSnapshots && (
+                    <div style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:"1.25rem",marginBottom:"1.5rem"}}>
+                      <div style={{fontWeight:500,color:P.text,fontSize:".9rem",marginBottom:"1rem"}}>🗂 Saved Snapshots <span style={{fontWeight:400,fontSize:".75rem",color:P.muted}}>(raw event data is never deleted)</span></div>
+                      {analyticsSnapshots.length === 0 ? (
+                        <div style={{color:P.muted,fontSize:".8rem"}}>No snapshots yet — click "📸 Save snapshot" to record a point-in-time report.</div>
+                      ) : analyticsSnapshots.map(snap => (
+                        <div key={snap.key} style={{borderBottom:`1px solid ${P.border}`,paddingBottom:".75rem",marginBottom:".75rem"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:".4rem"}}>
+                            <div style={{fontSize:".78rem",color:P.accent,fontWeight:500}}>{new Date(snap.saved_at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})} <span style={{color:P.muted,fontWeight:400}}>({snap.range}d window)</span></div>
+                            <button onClick={()=>deleteSnapshot(snap.key)} style={{background:"none",border:"none",cursor:"pointer",color:P.muted,fontSize:".8rem"}} onMouseOver={e=>e.currentTarget.style.color="#e07070"} onMouseOut={e=>e.currentTarget.style.color=P.muted}>🗑</button>
+                          </div>
+                          <div style={{display:"flex",gap:"1rem",flexWrap:"wrap",fontSize:".75rem",color:P.muted}}>
+                            {[["Users",snap.uniqueUsers],["Logins",snap.totalLogins],["Views",snap.totalViews],["Searches",snap.totalSearches],["WA Shares",snap.shares],["Signups",snap.signups]].map(([l,v])=>(
+                              <span key={l}><strong style={{color:P.text}}>{v??"-"}</strong> {l}</span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:"1rem",marginBottom:"1.5rem"}}>
                     <div style={{padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10}}>
@@ -4101,6 +4170,13 @@ export default function TutuTrade() {
                   </label>
                 )}
               </div>
+              {(isAdmin || selectedListing?.seller_email === user?.email) && (
+                <div className="form-group">
+                  <label className="form-label">Listing expiry date {isAdmin && <span style={{color:P.muted,fontWeight:400}}>(admin can override)</span>}</label>
+                  <input className="form-input" type="date" value={editForm.expires_at} onChange={e=>setEditForm(f=>({...f,expires_at:e.target.value}))} min={new Date().toISOString().slice(0,10)}/>
+                  <div className="form-hint">Leave blank to keep the current expiry date unchanged.</div>
+                </div>
+              )}
               <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={handleUpdateListing}>Save changes</button>
             </div>
           </div>
