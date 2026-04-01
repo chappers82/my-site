@@ -784,6 +784,10 @@ function SchoolAdBanner({ ads, schoolId }) {
 export default function TutuTrade() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSchoolAdmin, setIsSchoolAdmin] = useState(false);
+  const [schoolAdminRoles, setSchoolAdminRoles] = useState([]); // [{email, school_id, school_name}] — loaded by super admin
+  const [mySchoolAdminRole, setMySchoolAdminRole] = useState(null); // the logged-in user's school admin role if any
+  const [schoolAdminTab, setSchoolAdminTab] = useState("events");
   const [loading, setLoading] = useState(true);
   const [listings, setListings] = useState([]);
   const [ads, setAds] = useState([]);
@@ -896,12 +900,12 @@ export default function TutuTrade() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadConversations(session.user.email); loadOffers(); }
+      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadConversations(session.user.email); loadOffers(); loadMySchoolAdminRole(session.user.email); }
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadConversations(session.user.email); loadOffers(); }
+      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadConversations(session.user.email); loadOffers(); loadMySchoolAdminRole(session.user.email); }
       else { setUserSchools([]); setIsAdmin(false); setNotifPrefs(DEFAULT_NOTIF_PREFS); setFavourites([]); setConversations([]); }
     });
     loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies(); loadCommentCounts(); loadWantedPosts(); loadFairyName(); loadRatings(); loadNudges();
@@ -909,7 +913,7 @@ export default function TutuTrade() {
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
   }, []);
 
-  useEffect(() => { if (isAdmin) { loadAllUserSchools(); loadAllUsers(); loadAnalytics(7); } }, [isAdmin]);
+  useEffect(() => { if (isAdmin) { loadAllUserSchools(); loadAllUsers(); loadAnalytics(7); loadSchoolAdminRoles(); } }, [isAdmin]);
   useEffect(() => {
     if (!user) { setNotifications([]); return; }
     const loadNotifications = async () => {
@@ -1073,6 +1077,32 @@ export default function TutuTrade() {
   };
   const loadAllUserSchools = async () => { const { data } = await supabase.from("user_schools").select("*"); if (data) setAllUserSchools(data); };
   const loadAllUsers = async () => { const { data } = await supabase.from("user_profiles").select("*"); if (data) setAllUsers(data); };
+
+  const loadMySchoolAdminRole = async (email) => {
+    const e = email || user?.email;
+    if (!e || e === ADMIN_EMAIL) return;
+    const { data } = await supabase.from("school_admin_roles").select("*, schools(name,color)").eq("email", e).single();
+    if (data) {
+      setMySchoolAdminRole(data);
+      setIsSchoolAdmin(true);
+    }
+  };
+  const loadSchoolAdminRoles = async () => {
+    const { data } = await supabase.from("school_admin_roles").select("*");
+    if (data) setSchoolAdminRoles(data);
+  };
+  const assignSchoolAdmin = async (email, schoolId) => {
+    if (!email || !schoolId) return;
+    const school = schools.find(s => s.id === schoolId);
+    await supabase.from("school_admin_roles").upsert([{ email: email.toLowerCase().trim(), school_id: schoolId }], { onConflict: "email" });
+    await loadSchoolAdminRoles();
+    setSuccess(`${email} is now school admin for ${school?.name}`);
+  };
+  const revokeSchoolAdmin = async (email) => {
+    if (!window.confirm(`Remove school admin role from ${email}?`)) return;
+    await supabase.from("school_admin_roles").delete().eq("email", email);
+    await loadSchoolAdminRoles();
+  };
 
   const closeModal = () => { setModal(null); setAuthError(""); setCreateError(""); setAddSchoolError(""); setEditingAd(null); setSelectedUser(null); setConfirmDelete(null); setConfirmDeleteSchool(null); setAddUserSchoolId(""); setMoveUserSchool({fromId:"",toId:""}); };
   const getSchoolColor = (schoolId) => schools.find(s => s.id === schoolId)?.color || P.accent;
@@ -2158,6 +2188,7 @@ export default function TutuTrade() {
               <span className="header-hi">Hi, {user.user_metadata?.full_name?.split(" ")[0] || user.email}</span>
               <button className="btn btn-ghost btn-sm header-desktop-only" onClick={() => setView("profile")}>My Profile</button>
               {isAdmin && <button className="btn btn-admin btn-sm header-desktop-only" onClick={() => setView("admin")}>⚙ Admin</button>}
+              {isSchoolAdmin && !isAdmin && <button className="btn btn-sm header-desktop-only" style={{background:"rgba(124,111,224,.15)",border:"1px solid rgba(124,111,224,.35)",color:"#a99ef0"}} onClick={() => setView("schooladmin")}>🏫 School Panel</button>}
               <button className="btn btn-primary btn-sm" onClick={() => setModal("create")}>
                 + List<span className="header-desktop-only"> Item</span>
               </button>
@@ -2173,6 +2204,7 @@ export default function TutuTrade() {
                     <div className="user-menu-panel">
                       <button className="user-menu-item" onClick={()=>{setView("profile");setShowUserMenu(false);}}>👤 My Profile</button>
                       {isAdmin && <button className="user-menu-item" onClick={()=>{setView("admin");setShowUserMenu(false);}}>⚙ Admin</button>}
+                      {isSchoolAdmin && !isAdmin && <button className="user-menu-item" onClick={()=>{setView("schooladmin");setShowUserMenu(false);}}>🏫 School Panel</button>}
                       <button className="user-menu-item" onClick={()=>{handleLogout();setShowUserMenu(false);}}>Sign out</button>
                     </div>
                   </>
@@ -2201,6 +2233,169 @@ export default function TutuTrade() {
 
       <div className="main">
         {success && <div className="success-banner" onClick={() => setSuccess("")}>✓ {success}</div>}
+
+        {/* ── SCHOOL ADMIN ── */}
+        {view === "schooladmin" && isSchoolAdmin && mySchoolAdminRole && (() => {
+          const mySchool = schools.find(s => s.id === mySchoolAdminRole.school_id);
+          const schoolColor = mySchool?.color || P.admin;
+          const schoolListings = listings.filter(l => {
+            const ids = l.school_ids?.length ? l.school_ids : (l.school_id ? [l.school_id] : []);
+            return ids.includes(mySchoolAdminRole.school_id);
+          });
+          const schoolEvents = events.filter(e => e.school_id === mySchoolAdminRole.school_id);
+          return (
+            <div>
+              <div style={{marginBottom:"1.5rem"}}>
+                <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"1.7rem",color:schoolColor,marginBottom:".3rem"}}>🏫 {mySchool?.name || "School"} Panel</h2>
+                <p style={{fontSize:".82rem",color:P.muted}}>Manage events and announcements for your school.</p>
+              </div>
+
+              {/* Stats */}
+              <div className="admin-stat-grid" style={{marginBottom:"1.5rem"}}>
+                <div className="admin-stat"><div className="admin-stat-value">{schoolListings.length}</div><div className="admin-stat-label">Listings</div></div>
+                <div className="admin-stat"><div className="admin-stat-value">{schoolListings.filter(l=>!l.sold).length}</div><div className="admin-stat-label">Active</div></div>
+                <div className="admin-stat"><div className="admin-stat-value">{schoolListings.filter(l=>l.sold).length}</div><div className="admin-stat-label">Sold</div></div>
+                <div className="admin-stat"><div className="admin-stat-value">{schoolEvents.length}</div><div className="admin-stat-label">Events</div></div>
+              </div>
+
+              {/* Tabs */}
+              <div className="admin-tabs" style={{marginBottom:"1.5rem"}}>
+                {["events","nudges"].map(t => (
+                  <button key={t} className={`admin-tab ${schoolAdminTab===t?"active":""}`} onClick={()=>setSchoolAdminTab(t)} style={schoolAdminTab===t?{background:`rgba(124,111,224,.15)`,borderColor:schoolColor,color:schoolColor}:{}}>
+                    {t.charAt(0).toUpperCase()+t.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              {/* Events tab */}
+              {schoolAdminTab === "events" && (
+                <div className="admin-section">
+                  <div className="admin-section-title">📅 School Events</div>
+                  <p style={{fontSize:".82rem",color:P.muted,marginBottom:"1.25rem"}}>Add events for {mySchool?.name}. Members see a live countdown when browsing your school.</p>
+
+                  <div style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:"1.25rem",marginBottom:"1.5rem"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:".75rem",marginBottom:".75rem"}}>
+                      <div>
+                        <label className="form-label">Event name *</label>
+                        <input className="form-input" placeholder="e.g. Summer Showcase" value={eventForm.title} onChange={e=>setEventForm(f=>({...f,title:e.target.value}))}/>
+                      </div>
+                      <div>
+                        <label className="form-label">Date *</label>
+                        <input className="form-input" type="date" value={eventForm.event_date} onChange={e=>setEventForm(f=>({...f,event_date:e.target.value}))}/>
+                      </div>
+                    </div>
+                    <div style={{marginBottom:".75rem"}}>
+                      <label className="form-label">Description (optional)</label>
+                      <input className="form-input" placeholder="Any extra details..." value={eventForm.description||""} onChange={e=>setEventForm(f=>({...f,description:e.target.value}))}/>
+                    </div>
+                    <button className="btn btn-primary btn-sm" style={{width:"100%"}} onClick={async()=>{
+                      if (!eventForm.title || !eventForm.event_date) return;
+                      if (editingEvent) {
+                        await supabase.from("events").update({title:eventForm.title,event_date:eventForm.event_date,description:eventForm.description}).eq("id",editingEvent.id);
+                        setEditingEvent(null);
+                      } else {
+                        await supabase.from("events").insert([{title:eventForm.title,event_date:eventForm.event_date,description:eventForm.description,school_id:mySchoolAdminRole.school_id}]);
+                      }
+                      await loadEvents();
+                      setEventForm({title:"",event_date:"",description:"",school_id:""});
+                      setSuccess("Event saved!");
+                    }}>
+                      {editingEvent ? "Update Event" : "Add Event"}
+                    </button>
+                  </div>
+
+                  {schoolEvents.length === 0 ? (
+                    <div style={{color:P.muted,fontSize:".83rem",textAlign:"center",padding:"1.5rem"}}>No events yet — add your first one above.</div>
+                  ) : schoolEvents.map(ev => (
+                    <div key={ev.id} style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:".85rem 1rem",marginBottom:".6rem",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"1rem",flexWrap:"wrap"}}>
+                      <div>
+                        <div style={{fontWeight:500,color:P.text,fontSize:".88rem"}}>{ev.title}</div>
+                        <div style={{fontSize:".73rem",color:P.muted}}>{new Date(ev.event_date).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</div>
+                        {ev.description && <div style={{fontSize:".73rem",color:P.muted,marginTop:".2rem"}}>{ev.description}</div>}
+                      </div>
+                      <div style={{display:"flex",gap:".4rem",flexShrink:0}}>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>{setEditingEvent(ev);setEventForm({title:ev.title,event_date:ev.event_date,description:ev.description||"",school_id:ev.school_id});}}>Edit</button>
+                        <button className="btn btn-danger btn-sm" onClick={()=>handleDeleteEvent(ev.id)}>Remove</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Nudges tab */}
+              {schoolAdminTab === "nudges" && (
+                <div className="admin-section">
+                  <div className="admin-section-title">📣 Announcements</div>
+                  <p style={{fontSize:".82rem",color:P.muted,marginBottom:"1.25rem"}}>Send announcements to members of {mySchool?.name}.</p>
+
+                  <div style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:"1.25rem",marginBottom:"1.5rem"}}>
+                    <div style={{marginBottom:".75rem"}}>
+                      <label className="form-label">Title *</label>
+                      <input className="form-input" placeholder="e.g. Show season prep!" value={nudgeForm.title} onChange={e=>setNudgeForm(f=>({...f,title:e.target.value}))}/>
+                    </div>
+                    <div style={{marginBottom:".75rem"}}>
+                      <label className="form-label">Message *</label>
+                      <textarea className="form-input" rows={3} placeholder="Your message to school members..." value={nudgeForm.message} onChange={e=>setNudgeForm(f=>({...f,message:e.target.value}))} style={{resize:"vertical"}}/>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:".75rem",marginBottom:".75rem"}}>
+                      <div>
+                        <label className="form-label">Send date (optional)</label>
+                        <input className="form-input" type="datetime-local" value={nudgeForm.send_at} onChange={e=>setNudgeForm(f=>({...f,send_at:e.target.value}))}/>
+                      </div>
+                      <div>
+                        <label className="form-label">Expires (optional)</label>
+                        <input className="form-input" type="datetime-local" value={nudgeForm.expires_at} onChange={e=>setNudgeForm(f=>({...f,expires_at:e.target.value}))}/>
+                      </div>
+                    </div>
+                    <button className="btn btn-primary btn-sm" style={{width:"100%"}} onClick={async()=>{
+                      if (!nudgeForm.title || !nudgeForm.message) return;
+                      const schoolScopedForm = {...nudgeForm, target_type:"school", target_school_id:mySchoolAdminRole.school_id};
+                      // Temporarily set form, then save using the scoped data
+                      const payload = {
+                        title: schoolScopedForm.title,
+                        message: schoolScopedForm.message,
+                        target_type: "school",
+                        target_school_id: mySchoolAdminRole.school_id,
+                        channel: "both",
+                        send_at: schoolScopedForm.send_at || new Date().toISOString(),
+                        expires_at: schoolScopedForm.expires_at || null,
+                        sent: !schoolScopedForm.send_at || new Date(schoolScopedForm.send_at) <= new Date(),
+                      };
+                      const { data } = await supabase.from("nudges").insert([payload]).select().single();
+                      if (data) {
+                        setNudges(prev => [data, ...prev]);
+                        setNudgeForm({title:"",message:"",target_type:"all",target_school_id:"",channel:"both",send_at:"",expires_at:""});
+                        setSuccess("Announcement sent to your school members!");
+                      }
+                    }}>
+                      {nudgeForm.send_at && new Date(nudgeForm.send_at) > new Date() ? "📅 Schedule Announcement" : "📣 Send Now"}
+                    </button>
+                  </div>
+
+                  {nudges.filter(n=>n.target_school_id===mySchoolAdminRole.school_id).length === 0 ? (
+                    <div style={{color:P.muted,fontSize:".83rem",textAlign:"center",padding:"1.5rem"}}>No announcements yet.</div>
+                  ) : nudges.filter(n=>n.target_school_id===mySchoolAdminRole.school_id).map(nudge => {
+                    const now = new Date();
+                    const expired = nudge.expires_at && new Date(nudge.expires_at) < now;
+                    const scheduled = nudge.send_at && new Date(nudge.send_at) > now;
+                    return (
+                      <div key={nudge.id} style={{background:P.card,border:`1px solid ${expired?"rgba(224,112,112,.25)":scheduled?"rgba(255,180,0,.25)":P.border}`,borderRadius:10,padding:"1rem",marginBottom:".75rem",opacity:expired?0.6:1}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                          <div style={{fontWeight:500,color:P.text,fontSize:".88rem"}}>{nudge.title}</div>
+                          <div style={{display:"flex",gap:".35rem",alignItems:"center"}}>
+                            <span style={{fontSize:".65rem",padding:".15rem .5rem",borderRadius:10,background:expired?"rgba(224,112,112,.15)":scheduled?"rgba(255,180,0,.15)":"rgba(111,207,151,.15)",color:expired?"#e07070":scheduled?"#ffb400":"#6fcf97",fontWeight:500}}>{expired?"Expired":scheduled?"Scheduled":"Sent"}</span>
+                            <button onClick={()=>deleteNudge(nudge.id)} style={{background:"none",border:"none",cursor:"pointer",color:P.muted,fontSize:".85rem"}} onMouseOver={e=>e.currentTarget.style.color="#e07070"} onMouseOut={e=>e.currentTarget.style.color=P.muted}>🗑</button>
+                          </div>
+                        </div>
+                        <div style={{fontSize:".78rem",color:P.muted,marginTop:".25rem"}}>{nudge.message}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── ADMIN ── */}
         {view === "admin" && isAdmin ? (
@@ -2486,6 +2681,44 @@ export default function TutuTrade() {
                   );
                 })}
                 {!allUsers.length && <p style={{color:P.muted,fontSize:".84rem"}}>No users yet.</p>}
+                <div style={{marginTop:"2rem",paddingTop:"1.5rem",borderTop:`1px solid ${P.border}`}}>
+                  <div className="admin-section-title" style={{marginBottom:"1rem"}}>🏫 School Admins</div>
+                  <p style={{fontSize:".82rem",color:P.muted,marginBottom:"1.25rem"}}>Assign a user as school admin — they get access to manage events and nudges for their school. One admin per school.</p>
+                  <div style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:"1.25rem",marginBottom:"1rem"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:".75rem",alignItems:"end"}}>
+                      <div>
+                        <label className="form-label">User email</label>
+                        <input id="school-admin-email-input" className="form-input" placeholder="their@email.com" type="email"/>
+                      </div>
+                      <div>
+                        <label className="form-label">School</label>
+                        <select id="school-admin-school-select" className="form-select">
+                          <option value="">Select school...</option>
+                          {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </div>
+                      <button className="btn btn-primary btn-sm" onClick={()=>{
+                        const email = document.getElementById("school-admin-email-input").value;
+                        const schoolId = document.getElementById("school-admin-school-select").value;
+                        assignSchoolAdmin(email, schoolId);
+                      }}>Assign</button>
+                    </div>
+                  </div>
+                  {schoolAdminRoles.length === 0 ? (
+                    <div style={{color:P.muted,fontSize:".82rem"}}>No school admins assigned yet.</div>
+                  ) : schoolAdminRoles.map(role => {
+                    const school = schools.find(s => s.id === role.school_id);
+                    return (
+                      <div key={role.email} style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:".85rem 1rem",marginBottom:".5rem",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"1rem",flexWrap:"wrap"}}>
+                        <div>
+                          <div style={{fontWeight:500,color:P.text,fontSize:".88rem"}}>{role.email}</div>
+                          <div style={{fontSize:".73rem",color:P.muted}}>🏫 {school?.name || role.school_id}</div>
+                        </div>
+                        <button className="btn btn-danger btn-sm" onClick={()=>revokeSchoolAdmin(role.email)}>Revoke</button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
