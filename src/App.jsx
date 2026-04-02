@@ -4259,15 +4259,23 @@ export default function TutuTrade() {
                     <button className="btn btn-outline" style={{width:"100%"}} onClick={()=>openEditListing(selectedListing)}>✏ Edit listing</button>
                     <button className="btn btn-danger" style={{width:"100%"}} onClick={()=>handleDelete(selectedListing.id)}>Remove listing</button>
                   </div>
-                ) : (
+                ) : user ? (
                   <a href={`https://www.paypal.com/paypalme/tututrade/${selectedListing.price}GBP`} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>
                     <button className="paypal-btn">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.067 8.478c.492.88.556 2.014.3 3.327-.74 3.806-3.276 5.12-6.514 5.12h-.5a.805.805 0 0 0-.794.68l-.04.22-.63 3.993-.032.17a.804.804 0 0 1-.794.679H7.72a.483.483 0 0 1-.477-.558L7.418 21h1.518l.95-6.02h1.385c4.678 0 7.75-2.203 8.796-6.502zm-2.96-5.09c.762.868.983 1.81.755 3.137-.093.534-.26 1.02-.5 1.46-.838-3.511-3.235-4.7-7.438-4.7H5.964l.947-5.951A.483.483 0 0 1 7.388 1h5.787c3.44 0 5.58 1.03 6.557 3.019l-.625-.631z"/></svg>
                       Pay £{selectedListing.price} with PayPal
                     </button>
                   </a>
+                ) : (
+                  <div style={{padding:"1rem",background:P.surface,border:`1px solid ${P.border}`,borderRadius:10,textAlign:"center"}}>
+                    <div style={{fontSize:".85rem",color:P.text,marginBottom:".5rem",fontWeight:500}}>Join to purchase this item</div>
+                    <div style={{fontSize:".75rem",color:P.muted,marginBottom:".85rem"}}>You need a school account to buy on TutuTrade.</div>
+                    <div style={{display:"flex",gap:".5rem",justifyContent:"center"}}>
+                      <button className="btn btn-primary btn-sm" onClick={()=>{setAuthTab("register");setModal("auth");}}>Join now →</button>
+                      <button className="btn btn-ghost btn-sm" onClick={()=>{setAuthTab("login");setModal("auth");}}>Sign in</button>
+                    </div>
+                  </div>
                 )}
-                {!user && <p style={{textAlign:"center",fontSize:".76rem",color:P.muted,marginTop:".7rem"}}><button className="text-link" onClick={()=>{setModal("auth");setAuthTab("login");}}>Sign in</button> to purchase</p>}
                 {/* Contextual join prompt for non-logged-in users */}
                 {!user && !selectedListing.sold && authPromptFor && (
                   <div style={{marginTop:".75rem",padding:"1rem",background:P.surface,border:`1px solid ${P.border}`,borderRadius:10}}>
