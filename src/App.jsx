@@ -18,19 +18,18 @@ function getLightP() { return {
 // ─── CONSTANTS ────────────────────────────────────────────────────────────
 const ADMIN_EMAIL = "grant.chaplin@hotmail.com";
 const DEFAULT_NOTIF_PREFS = {
-  new_comment:    { inapp: true,  email: true  },
-  comment_reply:  { inapp: true,  email: true  },
-  board_reply:    { inapp: false, email: true  },
-  wishlist_match: { inapp: true,  email: true  },
-  item_sold:      { inapp: true,  email: true  },
-  fairy_found:    { inapp: true,  email: true  },
-  new_user:       { inapp: true,  email: true  },
-  price_drop:     { inapp: true,  email: true  },
-  listing_expiring: { inapp: true, email: true },
-  new_message:    { inapp: true,  email: true  },
-  offer_received: { inapp: true,  email: true  },
-  offer_update:   { inapp: true,  email: true  },
-  school_nudge:   { inapp: true,  email: false },
+  new_comment:      { inapp: true,  email: true  },   // seller needs to know about questions
+  comment_reply:    { inapp: true,  email: false },   // in-app is enough for replies
+  wishlist_match:   { inapp: true,  email: false },   // could be frequent, in-app only
+  item_sold:        { inapp: true,  email: true  },   // important — keep email
+  fairy_found:      { inapp: true,  email: false },   // search result, not urgent
+  new_user:         { inapp: true,  email: true  },   // admin only
+  price_drop:       { inapp: true,  email: false },   // nice to know, not urgent
+  listing_expiring: { inapp: true,  email: true  },   // important — keep email
+  new_message:      { inapp: true,  email: true  },   // important — keep email
+  offer_received:   { inapp: true,  email: true  },   // important — keep email
+  offer_update:     { inapp: true,  email: true  },   // important — keep email
+  school_nudge:     { inapp: true,  email: false },   // opt-in feel
 };
 const SITE_URL = window.location.origin;
 
@@ -870,15 +869,13 @@ export default function TutuTrade() {
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
   const [analyticsData, setAnalyticsData] = useState([]);
   const [analyticsRange, setAnalyticsRange] = useState(7);
-  const [analyticsSnapshots, setAnalyticsSnapshots] = useState([]);
-  const [showSnapshots, setShowSnapshots] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTo, setComposeTo] = useState("");
   const [composeBody, setComposeBody] = useState("");
   const [offers, setOffers] = useState([]);
   const [offerForm, setOfferForm] = useState({ amount: "", message: "", listingId: null });
   const [nudges, setNudges] = useState([]);
-  const [nudgeForm, setNudgeForm] = useState({ title: "", message: "", target_type: "all", target_school_id: "", channel: "both", send_at: "", expires_at: "" });
+  const [nudgeForm, setNudgeForm] = useState({ title: "", message: "", target_type: "school", target_school_id: "", channel: "both", send_at: "", expires_at: "" });
   const [activeNudgeBanner, setActiveNudgeBanner] = useState(null);
   const searchTrackTimer = useRef(null);
   const pendingListingId = useRef(null);
@@ -1740,22 +1737,6 @@ export default function TutuTrade() {
     const { data } = await supabase.from("analytics_events").select("*").gte("created_at", since).order("created_at");
     if (data) setAnalyticsData(data);
   };
-  const loadSnapshots = async () => {
-    const { data } = await supabase.from("settings").select("key,value").like("key","analytics_snapshot_%").order("key",{ascending:false});
-    if (data) setAnalyticsSnapshots(data.map(d => ({ key: d.key, ...JSON.parse(d.value) })));
-  };
-  const saveSnapshot = async (stats) => {
-    const key = `analytics_snapshot_${new Date().toISOString().replace(/[:.]/g,"-")}`;
-    const snap = { ...stats, saved_at: new Date().toISOString(), range: analyticsRange };
-    await supabase.from("settings").upsert({ key, value: JSON.stringify(snap) }, { onConflict:"key" });
-    await loadSnapshots();
-    setSuccess("Snapshot saved! Raw data is preserved — this is just a point-in-time record.");
-  };
-  const deleteSnapshot = async (key) => {
-    if (!window.confirm("Delete this snapshot?")) return;
-    await supabase.from("settings").delete().eq("key", key);
-    setAnalyticsSnapshots(prev => prev.filter(s => s.key !== key));
-  };
 
   // ── FAVOURITES ──
   const toggleFavourite = async (e, listingId) => {
@@ -1988,7 +1969,7 @@ export default function TutuTrade() {
     const { data } = await supabase.from("nudges").insert([payload]).select().single();
     if (data) {
       setNudges(prev => [data, ...prev]);
-      setNudgeForm({ title: "", message: "", target_type: "all", target_school_id: "", channel: "both", send_at: "", expires_at: "" });
+      setNudgeForm({ title: "", message: "", target_type: "school", target_school_id: "", channel: "both", send_at: "", expires_at: "" });
       // If sending now, dispatch in-app + email
       if (payload.sent) {
         const { data: users } = await supabase.from("settings").select("key,value").like("key", "notif_prefs_%");
@@ -2914,7 +2895,6 @@ export default function TutuTrade() {
                         <button key={d} className={`btn btn-sm ${analyticsRange===d?"btn-admin":"btn-ghost"}`} onClick={()=>{setAnalyticsRange(d);loadAnalytics(d);}}>{d}d</button>
                       ))}
                       <button className="btn btn-sm btn-admin" onClick={()=>loadAnalytics()}>↻</button>
-                      <button className="btn btn-sm btn-ghost" onClick={()=>{setShowSnapshots(s=>!s);loadSnapshots();}} title="View saved snapshots">🗂 Snapshots</button>
                     </div>
                   </div>
 
@@ -2936,7 +2916,6 @@ export default function TutuTrade() {
                       <div style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:"1.25rem",marginBottom:"1.5rem"}}>
                         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1rem",flexWrap:"wrap",gap:".5rem"}}>
                           <div style={{fontWeight:500,color:P.text,fontSize:".9rem"}}>📲 WhatsApp Sharing Funnel</div>
-                          <button className="btn btn-sm btn-ghost" onClick={()=>saveSnapshot({uniqueUsers,totalLogins,totalViews,totalSearches,totalFairy,totalEvents:analyticsData.length,shares,opens,signups})}>📸 Save snapshot</button>
                         </div>
                         <div style={{display:"flex",gap:"1rem",flexWrap:"wrap"}}>
                           {[{label:"Shares sent",value:shares,color:"#128C7E"},{label:"Links opened",value:opens,color:P.accent},{label:"Signups from share",value:signups,color:"#6fcf97"}].map(({label,value,color})=>(
@@ -2954,27 +2933,6 @@ export default function TutuTrade() {
                     );
                   })()}
 
-                  {/* Snapshots panel */}
-                  {showSnapshots && (
-                    <div style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:"1.25rem",marginBottom:"1.5rem"}}>
-                      <div style={{fontWeight:500,color:P.text,fontSize:".9rem",marginBottom:"1rem"}}>🗂 Saved Snapshots <span style={{fontWeight:400,fontSize:".75rem",color:P.muted}}>(raw event data is never deleted)</span></div>
-                      {analyticsSnapshots.length === 0 ? (
-                        <div style={{color:P.muted,fontSize:".8rem"}}>No snapshots yet — click "📸 Save snapshot" to record a point-in-time report.</div>
-                      ) : analyticsSnapshots.map(snap => (
-                        <div key={snap.key} style={{borderBottom:`1px solid ${P.border}`,paddingBottom:".75rem",marginBottom:".75rem"}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:".4rem"}}>
-                            <div style={{fontSize:".78rem",color:P.accent,fontWeight:500}}>{new Date(snap.saved_at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})} <span style={{color:P.muted,fontWeight:400}}>({snap.range}d window)</span></div>
-                            <button onClick={()=>deleteSnapshot(snap.key)} style={{background:"none",border:"none",cursor:"pointer",color:P.muted,fontSize:".8rem"}} onMouseOver={e=>e.currentTarget.style.color="#e07070"} onMouseOut={e=>e.currentTarget.style.color=P.muted}>🗑</button>
-                          </div>
-                          <div style={{display:"flex",gap:"1rem",flexWrap:"wrap",fontSize:".75rem",color:P.muted}}>
-                            {[["Users",snap.uniqueUsers],["Logins",snap.totalLogins],["Views",snap.totalViews],["Searches",snap.totalSearches],["WA Shares",snap.shares],["Signups",snap.signups]].map(([l,v])=>(
-                              <span key={l}><strong style={{color:P.text}}>{v??"-"}</strong> {l}</span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
 
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:"1rem",marginBottom:"1.5rem"}}>
                     <div style={{padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10}}>
@@ -3053,21 +3011,17 @@ export default function TutuTrade() {
                     <div>
                       <label className="form-label">Target audience</label>
                       <select className="form-select" value={nudgeForm.target_type} onChange={e=>setNudgeForm(f=>({...f,target_type:e.target.value}))}>
-                        <option value="all">All users</option>
                         <option value="school">Specific school</option>
-                        <option value="sellers">Sellers only</option>
                       </select>
                     </div>
                   </div>
-                  {nudgeForm.target_type === "school" && (
-                    <div style={{marginBottom:".75rem"}}>
-                      <label className="form-label">School</label>
-                      <select className="form-select" value={nudgeForm.target_school_id} onChange={e=>setNudgeForm(f=>({...f,target_school_id:e.target.value}))}>
-                        <option value="">Select a school...</option>
-                        {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
-                    </div>
-                  )}
+                  <div style={{marginBottom:".75rem"}}>
+                    <label className="form-label">School</label>
+                    <select className="form-select" value={nudgeForm.target_school_id} onChange={e=>setNudgeForm(f=>({...f,target_school_id:e.target.value}))}>
+                      <option value="">Select a school...</option>
+                      {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
                   <div style={{marginBottom:".75rem"}}>
                     <label className="form-label">Message</label>
                     <textarea className="form-input" rows={3} placeholder="Your message to users..." value={nudgeForm.message} onChange={e=>setNudgeForm(f=>({...f,message:e.target.value}))} style={{resize:"vertical"}}/>
@@ -3214,7 +3168,6 @@ export default function TutuTrade() {
                   {[
                     {key:"new_comment",    label:"New questions on my listings"},
                     {key:"comment_reply",  label:"Replies to my questions"},
-                    {key:"board_reply",    label:"Board post replies"},
                     {key:"wishlist_match", label:"✨ Wish matched by a new listing"},
                     {key:"item_sold",      label:"My item sold"},
                     {key:"fairy_found",    label:`${fairyName} search results`},
