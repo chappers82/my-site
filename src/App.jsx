@@ -18,19 +18,18 @@ function getLightP() { return {
 // ─── CONSTANTS ────────────────────────────────────────────────────────────
 const ADMIN_EMAIL = "grant.chaplin@hotmail.com";
 const DEFAULT_NOTIF_PREFS = {
-  new_comment:    { inapp: true,  email: true  },
-  comment_reply:  { inapp: true,  email: true  },
-  board_reply:    { inapp: false, email: true  },
-  wishlist_match: { inapp: true,  email: true  },
-  item_sold:      { inapp: true,  email: true  },
-  fairy_found:    { inapp: true,  email: true  },
-  new_user:       { inapp: true,  email: true  },
-  price_drop:     { inapp: true,  email: true  },
-  listing_expiring: { inapp: true, email: true },
-  new_message:    { inapp: true,  email: true  },
-  offer_received: { inapp: true,  email: true  },
-  offer_update:   { inapp: true,  email: true  },
-  school_nudge:   { inapp: true,  email: false },
+  new_comment:      { inapp: true,  email: true  },   // seller needs to know about questions
+  comment_reply:    { inapp: true,  email: false },   // in-app is enough for replies
+  wishlist_match:   { inapp: true,  email: false },   // could be frequent, in-app only
+  item_sold:        { inapp: true,  email: true  },   // important — keep email
+  fairy_found:      { inapp: true,  email: false },   // search result, not urgent
+  new_user:         { inapp: true,  email: true  },   // admin only
+  price_drop:       { inapp: true,  email: false },   // nice to know, not urgent
+  listing_expiring: { inapp: true,  email: true  },   // important — keep email
+  new_message:      { inapp: true,  email: true  },   // important — keep email
+  offer_received:   { inapp: true,  email: true  },   // important — keep email
+  offer_update:     { inapp: true,  email: true  },   // important — keep email
+  school_nudge:     { inapp: true,  email: false },   // opt-in feel
 };
 const SITE_URL = window.location.origin;
 
@@ -824,6 +823,7 @@ export default function TutuTrade() {
   const [selectedListing, setSelectedListing] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [authTab, setAuthTab] = useState("login");
+  const [authPromptFor, setAuthPromptFor] = useState(null); // "message" | "offer" | null
   const [success, setSuccess] = useState("");
   const [filters, setFilters] = useState({ search:"", style:"", size:"", condition:"", maxPrice:"", school:"" });
   const [showSold, setShowSold] = useState(false);
@@ -870,15 +870,13 @@ export default function TutuTrade() {
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
   const [analyticsData, setAnalyticsData] = useState([]);
   const [analyticsRange, setAnalyticsRange] = useState(7);
-  const [analyticsSnapshots, setAnalyticsSnapshots] = useState([]);
-  const [showSnapshots, setShowSnapshots] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeTo, setComposeTo] = useState("");
   const [composeBody, setComposeBody] = useState("");
   const [offers, setOffers] = useState([]);
   const [offerForm, setOfferForm] = useState({ amount: "", message: "", listingId: null });
   const [nudges, setNudges] = useState([]);
-  const [nudgeForm, setNudgeForm] = useState({ title: "", message: "", target_type: "all", target_school_id: "", channel: "both", send_at: "", expires_at: "" });
+  const [nudgeForm, setNudgeForm] = useState({ title: "", message: "", target_type: "school", target_school_id: "", channel: "both", send_at: "", expires_at: "" });
   const [activeNudgeBanner, setActiveNudgeBanner] = useState(null);
   const searchTrackTimer = useRef(null);
   const pendingListingId = useRef(null);
@@ -1104,7 +1102,7 @@ export default function TutuTrade() {
     await loadSchoolAdminRoles();
   };
 
-  const closeModal = () => { setModal(null); setAuthError(""); setCreateError(""); setAddSchoolError(""); setEditingAd(null); setSelectedUser(null); setConfirmDelete(null); setConfirmDeleteSchool(null); setAddUserSchoolId(""); setMoveUserSchool({fromId:"",toId:""}); };
+  const closeModal = () => { setModal(null); setAuthError(""); setCreateError(""); setAddSchoolError(""); setEditingAd(null); setSelectedUser(null); setConfirmDelete(null); setConfirmDeleteSchool(null); setAddUserSchoolId(""); setMoveUserSchool({fromId:"",toId:""}); setAuthPromptFor(null); };
   const getSchoolColor = (schoolId) => schools.find(s => s.id === schoolId)?.color || P.accent;
   const getSchool = (schoolId) => schools.find(s => s.id === schoolId);
 
@@ -1740,22 +1738,6 @@ export default function TutuTrade() {
     const { data } = await supabase.from("analytics_events").select("*").gte("created_at", since).order("created_at");
     if (data) setAnalyticsData(data);
   };
-  const loadSnapshots = async () => {
-    const { data } = await supabase.from("settings").select("key,value").like("key","analytics_snapshot_%").order("key",{ascending:false});
-    if (data) setAnalyticsSnapshots(data.map(d => ({ key: d.key, ...JSON.parse(d.value) })));
-  };
-  const saveSnapshot = async (stats) => {
-    const key = `analytics_snapshot_${new Date().toISOString().replace(/[:.]/g,"-")}`;
-    const snap = { ...stats, saved_at: new Date().toISOString(), range: analyticsRange };
-    await supabase.from("settings").upsert({ key, value: JSON.stringify(snap) }, { onConflict:"key" });
-    await loadSnapshots();
-    setSuccess("Snapshot saved! Raw data is preserved — this is just a point-in-time record.");
-  };
-  const deleteSnapshot = async (key) => {
-    if (!window.confirm("Delete this snapshot?")) return;
-    await supabase.from("settings").delete().eq("key", key);
-    setAnalyticsSnapshots(prev => prev.filter(s => s.key !== key));
-  };
 
   // ── FAVOURITES ──
   const toggleFavourite = async (e, listingId) => {
@@ -1988,7 +1970,7 @@ export default function TutuTrade() {
     const { data } = await supabase.from("nudges").insert([payload]).select().single();
     if (data) {
       setNudges(prev => [data, ...prev]);
-      setNudgeForm({ title: "", message: "", target_type: "all", target_school_id: "", channel: "both", send_at: "", expires_at: "" });
+      setNudgeForm({ title: "", message: "", target_type: "school", target_school_id: "", channel: "both", send_at: "", expires_at: "" });
       // If sending now, dispatch in-app + email
       if (payload.sent) {
         const { data: users } = await supabase.from("settings").select("key,value").like("key", "notif_prefs_%");
@@ -2088,6 +2070,7 @@ export default function TutuTrade() {
   const openListingDetail = (listing) => {
     setSelectedListing(listing);
     setModal("detail");
+    setAuthPromptFor(null);
     loadComments(listing.id);
     setCommentText("");
     trackEvent("listing_view", { listing_id: listing.id, title: listing.title, style: listing.style, price: listing.price });
@@ -2151,6 +2134,19 @@ export default function TutuTrade() {
     }
     return true;
   });
+
+  // Listings visible to non-logged-in guests (school filter only, no sold items)
+  const guestFiltered = !user && filters.school ? listings.filter(l => {
+    if (l.sold) return false;
+    const lIds = l.school_ids?.length ? l.school_ids : (l.school_id ? [l.school_id] : []);
+    if (!lIds.includes(filters.school)) return false;
+    const q = filters.search.toLowerCase();
+    if (q && !l.title?.toLowerCase().includes(q) && !l.description?.toLowerCase().includes(q)) return false;
+    if (filters.style && l.style !== filters.style) return false;
+    if (filters.size && l.size !== filters.size) return false;
+    if (filters.maxPrice && l.price > Number(filters.maxPrice)) return false;
+    return true;
+  }) : [];
 
   const activeSchoolFilter = filters.school ? getSchool(filters.school) : null;
   const activeSchoolId = activeSchoolFilter?.id || null;
@@ -2914,7 +2910,6 @@ export default function TutuTrade() {
                         <button key={d} className={`btn btn-sm ${analyticsRange===d?"btn-admin":"btn-ghost"}`} onClick={()=>{setAnalyticsRange(d);loadAnalytics(d);}}>{d}d</button>
                       ))}
                       <button className="btn btn-sm btn-admin" onClick={()=>loadAnalytics()}>↻</button>
-                      <button className="btn btn-sm btn-ghost" onClick={()=>{setShowSnapshots(s=>!s);loadSnapshots();}} title="View saved snapshots">🗂 Snapshots</button>
                     </div>
                   </div>
 
@@ -2936,7 +2931,6 @@ export default function TutuTrade() {
                       <div style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:"1.25rem",marginBottom:"1.5rem"}}>
                         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1rem",flexWrap:"wrap",gap:".5rem"}}>
                           <div style={{fontWeight:500,color:P.text,fontSize:".9rem"}}>📲 WhatsApp Sharing Funnel</div>
-                          <button className="btn btn-sm btn-ghost" onClick={()=>saveSnapshot({uniqueUsers,totalLogins,totalViews,totalSearches,totalFairy,totalEvents:analyticsData.length,shares,opens,signups})}>📸 Save snapshot</button>
                         </div>
                         <div style={{display:"flex",gap:"1rem",flexWrap:"wrap"}}>
                           {[{label:"Shares sent",value:shares,color:"#128C7E"},{label:"Links opened",value:opens,color:P.accent},{label:"Signups from share",value:signups,color:"#6fcf97"}].map(({label,value,color})=>(
@@ -2954,27 +2948,6 @@ export default function TutuTrade() {
                     );
                   })()}
 
-                  {/* Snapshots panel */}
-                  {showSnapshots && (
-                    <div style={{background:P.card,border:`1px solid ${P.border}`,borderRadius:10,padding:"1.25rem",marginBottom:"1.5rem"}}>
-                      <div style={{fontWeight:500,color:P.text,fontSize:".9rem",marginBottom:"1rem"}}>🗂 Saved Snapshots <span style={{fontWeight:400,fontSize:".75rem",color:P.muted}}>(raw event data is never deleted)</span></div>
-                      {analyticsSnapshots.length === 0 ? (
-                        <div style={{color:P.muted,fontSize:".8rem"}}>No snapshots yet — click "📸 Save snapshot" to record a point-in-time report.</div>
-                      ) : analyticsSnapshots.map(snap => (
-                        <div key={snap.key} style={{borderBottom:`1px solid ${P.border}`,paddingBottom:".75rem",marginBottom:".75rem"}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:".4rem"}}>
-                            <div style={{fontSize:".78rem",color:P.accent,fontWeight:500}}>{new Date(snap.saved_at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})} <span style={{color:P.muted,fontWeight:400}}>({snap.range}d window)</span></div>
-                            <button onClick={()=>deleteSnapshot(snap.key)} style={{background:"none",border:"none",cursor:"pointer",color:P.muted,fontSize:".8rem"}} onMouseOver={e=>e.currentTarget.style.color="#e07070"} onMouseOut={e=>e.currentTarget.style.color=P.muted}>🗑</button>
-                          </div>
-                          <div style={{display:"flex",gap:"1rem",flexWrap:"wrap",fontSize:".75rem",color:P.muted}}>
-                            {[["Users",snap.uniqueUsers],["Logins",snap.totalLogins],["Views",snap.totalViews],["Searches",snap.totalSearches],["WA Shares",snap.shares],["Signups",snap.signups]].map(([l,v])=>(
-                              <span key={l}><strong style={{color:P.text}}>{v??"-"}</strong> {l}</span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
 
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:"1rem",marginBottom:"1.5rem"}}>
                     <div style={{padding:"1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:10}}>
@@ -3053,21 +3026,17 @@ export default function TutuTrade() {
                     <div>
                       <label className="form-label">Target audience</label>
                       <select className="form-select" value={nudgeForm.target_type} onChange={e=>setNudgeForm(f=>({...f,target_type:e.target.value}))}>
-                        <option value="all">All users</option>
                         <option value="school">Specific school</option>
-                        <option value="sellers">Sellers only</option>
                       </select>
                     </div>
                   </div>
-                  {nudgeForm.target_type === "school" && (
-                    <div style={{marginBottom:".75rem"}}>
-                      <label className="form-label">School</label>
-                      <select className="form-select" value={nudgeForm.target_school_id} onChange={e=>setNudgeForm(f=>({...f,target_school_id:e.target.value}))}>
-                        <option value="">Select a school...</option>
-                        {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
-                    </div>
-                  )}
+                  <div style={{marginBottom:".75rem"}}>
+                    <label className="form-label">School</label>
+                    <select className="form-select" value={nudgeForm.target_school_id} onChange={e=>setNudgeForm(f=>({...f,target_school_id:e.target.value}))}>
+                      <option value="">Select a school...</option>
+                      {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
                   <div style={{marginBottom:".75rem"}}>
                     <label className="form-label">Message</label>
                     <textarea className="form-input" rows={3} placeholder="Your message to users..." value={nudgeForm.message} onChange={e=>setNudgeForm(f=>({...f,message:e.target.value}))} style={{resize:"vertical"}}/>
@@ -3214,7 +3183,6 @@ export default function TutuTrade() {
                   {[
                     {key:"new_comment",    label:"New questions on my listings"},
                     {key:"comment_reply",  label:"Replies to my questions"},
-                    {key:"board_reply",    label:"Board post replies"},
                     {key:"wishlist_match", label:"✨ Wish matched by a new listing"},
                     {key:"item_sold",      label:"My item sold"},
                     {key:"fairy_found",    label:`${fairyName} search results`},
@@ -3269,31 +3237,114 @@ export default function TutuTrade() {
           <div className="landing">
             <div className="hero-eyebrow">✦ TutuTrade ✦</div>
             <h1 className="hero-title">Buy & sell <em>beautiful</em><br/>dancewear</h1>
-            <p className="hero-sub">A private marketplace for dance school communities. Buy and sell costumes, shoes and accessories with other parents at your school.</p>
-            <div style={{display:"flex",gap:"1rem",flexWrap:"wrap",justifyContent:"center",marginBottom:"1.5rem"}}>
-              <button className="btn btn-primary" style={{padding:".75rem 2rem",fontSize:".9rem"}} onClick={() => { setAuthTab("register"); setModal("auth"); }}>Join your school</button>
-              <button className="btn btn-ghost" style={{padding:".75rem 2rem",fontSize:".9rem"}} onClick={() => { setAuthTab("login"); setModal("auth"); }}>Sign in</button>
-            </div>
+            <p className="hero-sub" style={{fontWeight:500}}>Pre-loved costumes, shoes & accessories — traded between parents at your dance school.</p>
+
+            {/* School picker — the primary entry point */}
             {schools.length > 0 && (
-              <div>
-                <div style={{fontSize:".72rem",textTransform:"uppercase",letterSpacing:".15em",color:P.muted,marginBottom:".75rem"}}>Schools on TutuTrade</div>
-                <div className="landing-schools">
+              <div style={{marginBottom:"1.25rem"}}>
+                <div style={{fontSize:".75rem",color:P.muted,marginBottom:".65rem"}}>
+                  {filters.school ? "Browsing listings for:" : "👇 Pick your school to browse listings"}
+                </div>
+                <div className="school-badges">
                   {schools.map(s => {
                     const sc = s.color || P.accent;
+                    const isActive = filters.school === s.id;
+                    const count = listings.filter(l => !l.sold && (l.school_ids?.length ? l.school_ids : (l.school_id ? [l.school_id] : [])).includes(s.id)).length;
                     return (
-                      <div key={s.id} style={{display:"inline-flex",alignItems:"center",gap:".5rem",padding:".35rem .9rem",background:hexToRgba(sc,0.08),border:`1px solid ${hexToRgba(sc,0.3)}`,borderRadius:20,fontSize:".78rem",color:sc}}>
-                        <span style={{width:7,height:7,borderRadius:"50%",background:sc,display:"inline-block"}}/>
+                      <button key={s.id}
+                        onClick={() => setFilters(f => ({ ...f, school: isActive ? "" : s.id }))}
+                        style={{
+                          display:"inline-flex",alignItems:"center",gap:".5rem",padding:".45rem 1rem",
+                          background: isActive ? hexToRgba(sc,0.2) : hexToRgba(sc,0.08),
+                          border:`1px solid ${isActive ? sc : hexToRgba(sc,0.3)}`,
+                          borderRadius:20,fontSize:".78rem",color:sc,cursor:"pointer",transition:"all .2s",
+                          fontFamily:"'Jost',sans-serif",fontWeight: isActive ? 500 : 400,
+                          boxShadow: isActive ? `0 0 12px ${hexToRgba(sc,0.25)}` : "none",
+                          transform: isActive ? "translateY(-1px)" : "none",
+                        }}>
+                        <span style={{width:7,height:7,borderRadius:"50%",background:sc,display:"inline-block",flexShrink:0}}/>
                         {s.name}
-                      </div>
+                        <span style={{fontSize:".65rem",opacity:.7}}>({count})</span>
+                      </button>
                     );
                   })}
                 </div>
               </div>
             )}
+
+            {/* When a school is selected: show listings preview */}
+            {filters.school ? (
+              <>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1rem",flexWrap:"wrap",gap:".5rem"}}>
+                  <div style={{fontSize:".82rem",color:P.muted}}>
+                    <strong style={{color:P.text}}>{guestFiltered.length}</strong> listing{guestFiltered.length!==1?"s":""} available
+                  </div>
+                  <div style={{display:"flex",gap:".5rem",flexWrap:"wrap"}}>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setFilters(f=>({...f,school:""}))}>× Clear</button>
+                    <button className="btn btn-primary btn-sm" onClick={() => { setAuthTab("register"); setModal("auth"); }}>Join to contact sellers →</button>
+                  </div>
+                </div>
+                {guestFiltered.length === 0 ? (
+                  <div style={{textAlign:"center",padding:"2rem 1rem",color:P.muted,fontSize:".85rem"}}>
+                    <div style={{fontSize:"2rem",marginBottom:".5rem"}}>🩰</div>
+                    No listings yet for this school — be the first to post one!
+                    <div style={{marginTop:"1rem"}}>
+                      <button className="btn btn-primary btn-sm" onClick={() => { setAuthTab("register"); setModal("auth"); }}>Join & list an item</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid" style={{marginBottom:"1rem"}}>
+                      {guestFiltered.slice(0, 6).map(l => {
+                        const sc = getSchoolColor(l.school_id);
+                        return (
+                          <div className="card" key={l.id} style={{borderColor:hexToRgba(sc,0.25),cursor:"pointer"}} onClick={() => openListingDetail(l)}>
+                            <div className="school-stripe" style={{background:sc}}/>
+                            <div className="card-image-wrap">
+                              <div className="card-image">
+                                {(l.image||l.images?.[0]) ? <img src={l.image||l.images[0]} alt={l.title} loading="lazy" decoding="async"/> : styleEmoji[l.style]||"👗"}
+                                <span className={`condition-pill condition-${conditionKey[l.condition]||"good"}`}>{l.condition}</span>
+                              </div>
+                            </div>
+                            <div className="card-body">
+                              <div className="card-style-tag" style={{color:sc}}>{l.style}</div>
+                              <div className="card-title">{l.title}</div>
+                              <div className="card-meta">
+                                <span>Size: {l.size}</span>
+                              </div>
+                              <div className="card-footer">
+                                <div className="price">£{l.price} <span>GBP</span></div>
+                                <button className="btn btn-sm" style={{background:"transparent",color:sc,border:`1px solid ${hexToRgba(sc,0.5)}`}}>View</button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {guestFiltered.length > 6 && (
+                      <p style={{textAlign:"center",fontSize:".82rem",color:P.muted,marginBottom:"1.25rem"}}>
+                        +{guestFiltered.length - 6} more listings —{" "}
+                        <button className="text-link" onClick={() => { setAuthTab("register"); setModal("auth"); }}>join to see them all</button>
+                      </p>
+                    )}
+                  </>
+                )}
+                <div style={{textAlign:"center",padding:".5rem 0 1.25rem"}}>
+                  <button className="btn btn-ghost" style={{fontSize:".82rem"}} onClick={() => { setAuthTab("login"); setModal("auth"); }}>Already a member? Sign in</button>
+                </div>
+              </>
+            ) : (
+              /* No school selected yet — show sign in / join CTAs */
+              <div style={{display:"flex",gap:"1rem",flexWrap:"wrap",justifyContent:"center",marginBottom:"1.5rem"}}>
+                <button className="btn btn-primary" style={{padding:".75rem 2rem",fontSize:".9rem"}} onClick={() => { setAuthTab("register"); setModal("auth"); }}>Join your school</button>
+                <button className="btn btn-ghost" style={{padding:".75rem 2rem",fontSize:".9rem"}} onClick={() => { setAuthTab("login"); setModal("auth"); }}>Sign in</button>
+              </div>
+            )}
+
             <div className="landing-features">
-              <div className="landing-feature"><div className="landing-feature-icon">🔒</div><div className="landing-feature-title">Private & secure</div><div className="landing-feature-desc">Only parents from your dance school can see listings</div></div>
+              <div className="landing-feature"><div className="landing-feature-icon">🏫</div><div className="landing-feature-title">School community</div><div className="landing-feature-desc">Browse freely — only verified school members can post listings or contact sellers</div></div>
               <div className="landing-feature"><div className="landing-feature-icon">💰</div><div className="landing-feature-title">Save money</div><div className="landing-feature-desc">Buy pre-loved costumes at a fraction of the original price</div></div>
-              <div className="landing-feature"><div className="landing-feature-icon">🩰</div><div className="landing-feature-title">Dance community</div><div className="landing-feature-desc">Trade with parents you already know and trust</div></div>
+              <div className="landing-feature"><div className="landing-feature-icon">🩰</div><div className="landing-feature-title">Trusted sellers</div><div className="landing-feature-desc">Every seller is a verified parent from your dance school</div></div>
             </div>
           </div>
 
@@ -4172,6 +4223,11 @@ export default function TutuTrade() {
                   <span className={`condition-pill condition-${conditionKey[selectedListing.condition]||"good"}`} style={{position:"static"}}>{selectedListing.condition}</span>
                 </div>
                 <div className="detail-price">£{selectedListing.price}</div>
+                {/* WhatsApp share — prominent, early in the flow for easy forwarding */}
+                <button className="whatsapp-btn" style={{marginTop:".6rem"}} onClick={()=>shareOnWhatsApp(selectedListing)}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                  Forward to partner on WhatsApp
+                </button>
                 <p className="detail-desc">{selectedListing.description||"No description provided."}</p>
                 <div className="seller-info">
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:".35rem"}}>
@@ -4212,13 +4268,26 @@ export default function TutuTrade() {
                   </a>
                 )}
                 {!user && <p style={{textAlign:"center",fontSize:".76rem",color:P.muted,marginTop:".7rem"}}><button className="text-link" onClick={()=>{setModal("auth");setAuthTab("login");}}>Sign in</button> to purchase</p>}
-                {/* WhatsApp share */}
-                <button className="whatsapp-btn" onClick={()=>shareOnWhatsApp(selectedListing)}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                  Share on WhatsApp
-                </button>
+                {/* Contextual join prompt for non-logged-in users */}
+                {!user && !selectedListing.sold && authPromptFor && (
+                  <div style={{marginTop:".75rem",padding:"1rem",background:P.surface,border:`1px solid ${P.border}`,borderRadius:10}}>
+                    <div style={{fontSize:".82rem",fontWeight:500,color:P.text,marginBottom:".3rem"}}>
+                      {authPromptFor === "message" ? "✉ Message this seller" : "💰 Make an offer"}
+                    </div>
+                    <div style={{fontSize:".76rem",color:P.muted,marginBottom:".85rem"}}>
+                      Create a free account with your school code to contact {selectedListing.seller_name?.split(" ")[0] || "the seller"}. It takes 30 seconds.
+                    </div>
+                    <div style={{display:"flex",gap:".5rem",flexWrap:"wrap"}}>
+                      <button className="btn btn-primary btn-sm" style={{flex:1}} onClick={()=>{setAuthTab("register");setModal("auth");}}>Join now →</button>
+                      <button className="btn btn-ghost btn-sm" onClick={()=>{setAuthTab("login");setModal("auth");}}>Sign in</button>
+                    </div>
+                  </div>
+                )}
                 {/* Make an offer */}
-                {user && user.email !== selectedListing.seller_email && !selectedListing.sold && (() => {
+                {!selectedListing.sold && user?.email !== selectedListing.seller_email && (() => {
+                  if (!user) return (
+                    <button className="btn btn-ghost" style={{width:"100%",marginTop:".5rem",borderColor:"rgba(201,169,110,.4)",color:P.accent}} onClick={()=>setAuthPromptFor("offer")}>💰 Make an offer</button>
+                  );
                   const existingOffer = offers.find(o => o.listing_id === selectedListing.id && o.buyer_email === user.email && o.status === "pending");
                   const acceptedOffer = offers.find(o => o.listing_id === selectedListing.id && o.buyer_email === user.email && o.status === "accepted");
                   return existingOffer ? (
@@ -4244,8 +4313,10 @@ export default function TutuTrade() {
                   );
                 })()}
                 {/* Message seller */}
-                {user && user.email !== selectedListing.seller_email && !selectedListing.sold && (
-                  <button className="btn btn-ghost" style={{width:"100%",marginTop:".5rem"}} onClick={()=>startConversation(selectedListing)}>✉ Message seller</button>
+                {!selectedListing.sold && user?.email !== selectedListing.seller_email && (
+                  user
+                    ? <button className="btn btn-ghost" style={{width:"100%",marginTop:".5rem"}} onClick={()=>startConversation(selectedListing)}>✉ Message seller</button>
+                    : <button className="btn btn-ghost" style={{width:"100%",marginTop:".5rem"}} onClick={()=>setAuthPromptFor("message")}>✉ Message seller</button>
                 )}
                 {/* Rate seller — only on sold listings for non-owners who haven't rated */}
                 {user && user.email !== selectedListing.seller_email && selectedListing.sold && !ratings.find(r=>r.listing_id===selectedListing.id&&r.buyer_email===user.email) && (
