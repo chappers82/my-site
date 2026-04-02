@@ -77,7 +77,7 @@ const sendSoldEmail = async ({ listing, commissionPct }) => {
 };
 
 const sendResendEmail = async ({ to, subject, html }) => {
-  if (!to || to === ADMIN_EMAIL) return;
+  if (!to) return;
   try {
     await fetch("/.netlify/functions/send-email", {
       method: "POST",
@@ -1670,12 +1670,12 @@ export default function TutuTrade() {
       const sizeOk = !w.size || w.size === listing.size;
       if (schoolOk && styleOk && sizeOk) {
         const tutuWlPrefs = await getPrefsForEmail(w.user_email);
-        if (tutuWlPrefs.wishlist_match?.inapp !== false) await pushNotification(w.user_email, "wishlist_match", "🔍 Wishlist match!", `"${listing.title}" — ${[listing.style, listing.size].filter(Boolean).join(", ")} — £${listing.price}`, listing.id);
+        if (tutuWlPrefs.wishlist_match?.inapp !== false) await pushNotification(w.user_email, "wishlist_match", "✨ Your wish came true!", `"${listing.title}" — ${[listing.style, listing.size].filter(Boolean).join(", ")} — £${listing.price}`, listing.id);
         if (tutuWlPrefs.wishlist_match?.email !== false) await sendResendEmail({
           to: w.user_email,
-          subject: `🔍 A listing matches your wanted post on TutuTrade!`,
-          html: emailTemplate("Wishlist Match!", `
-            <p style="color:#a892c4;margin-bottom:1rem">Good news! A new listing matches something on your wanted list:</p>
+          subject: `✨ A listing matches your wish on TutuTrade!`,
+          html: emailTemplate("Your wish came true! ✨", `
+            <p style="color:#a892c4;margin-bottom:1rem">Good news! A new listing matches one of your wishes:</p>
             <div style="padding:1rem;background:#2d2142;border-left:3px solid #c9a96e;border-radius:6px;color:#f0eaf8;margin-bottom:1.25rem">
               <strong style="font-size:1rem">${listing.title}</strong><br/>
               <span style="color:#a892c4;font-size:.85rem">${[listing.style, listing.size, listing.condition].filter(Boolean).join(" · ")}</span><br/>
@@ -3215,7 +3215,7 @@ export default function TutuTrade() {
                     {key:"new_comment",    label:"New questions on my listings"},
                     {key:"comment_reply",  label:"Replies to my questions"},
                     {key:"board_reply",    label:"Board post replies"},
-                    {key:"wishlist_match", label:"Wanted list matches"},
+                    {key:"wishlist_match", label:"✨ Wish matched by a new listing"},
                     {key:"item_sold",      label:"My item sold"},
                     {key:"fairy_found",    label:`${fairyName} search results`},
                     {key:"price_drop",     label:"💾 Price drop on saved item"},
@@ -3358,8 +3358,7 @@ export default function TutuTrade() {
               <div className="nav-pills">
                 <button className={`nav-pill ${view==="browse"?"active":""}`} onClick={() => setView("browse")}>Browse all</button>
                 <button className={`nav-pill ${view==="mylistings"?"active":""}`} onClick={() => setView("mylistings")}>My listings</button>
-                <button className={`nav-pill ${view==="board"?"active":""}`} onClick={() => { setView("board"); loadBoardPosts(); loadBoardReplies(); setBoardSchoolId(userSchools[0]?.school_id || "general"); }}>💬 Board{boardPosts.length > 0 && <span style={{marginLeft:".4rem",background:P.accent,color:"#fff",borderRadius:10,fontSize:".65rem",padding:"1px 6px",fontWeight:700,verticalAlign:"middle"}}>{boardPosts.length}</span>}</button>
-                <button className={`nav-pill ${view==="wanted"?"active":""}`} onClick={() => { setView("wanted"); loadWantedPosts(); setWantedSchoolId(userSchools[0]?.school_id || "general"); }}>🔍 Wanted{wantedPosts.filter(p=>!p.fulfilled).length > 0 && <span style={{marginLeft:".4rem",background:P.accent,color:"#fff",borderRadius:10,fontSize:".65rem",padding:"1px 6px",fontWeight:700,verticalAlign:"middle"}}>{wantedPosts.filter(p=>!p.fulfilled).length}</span>}</button>
+                <button className={`nav-pill ${view==="wanted"?"active":""}`} onClick={() => { setView("wanted"); loadWantedPosts(); setWantedSchoolId(userSchools[0]?.school_id || "general"); }}>✨ Wishes{wantedPosts.filter(p=>!p.fulfilled).length > 0 && <span style={{marginLeft:".4rem",background:P.accent,color:"#fff",borderRadius:10,fontSize:".65rem",padding:"1px 6px",fontWeight:700,verticalAlign:"middle"}}>{wantedPosts.filter(p=>!p.fulfilled).length}</span>}</button>
                 <button className={`nav-pill ${view==="favourites"?"active":""}`} onClick={() => setView("favourites")}>❤ Saved{favourites.length > 0 && <span style={{marginLeft:".4rem",background:"#e07070",color:"#fff",borderRadius:10,fontSize:".65rem",padding:"1px 6px",fontWeight:700,verticalAlign:"middle"}}>{favourites.length}</span>}</button>
                 <button className={`nav-pill ${view==="messages"?"active":""}`} onClick={async()=>{setView("messages");setActiveConv(null);setConvMessages([]);await loadConversations();const u=await countUnreadMessages();setUnreadMsgCount(u);}}>✉ Messages{unreadMsgCount > 0 && <span style={{marginLeft:".4rem",background:P.accent,color:"#fff",borderRadius:10,fontSize:".65rem",padding:"1px 6px",fontWeight:700,verticalAlign:"middle"}}>{unreadMsgCount}</span>}</button>
               </div>
@@ -3381,6 +3380,23 @@ export default function TutuTrade() {
                       × Clear
                     </button>
                   </div>
+                  {(() => {
+                    const now = new Date();
+                    const activeNudge = nudges.find(n =>
+                      n.sent &&
+                      n.target_school_id === activeSchoolFilter.id &&
+                      (!n.expires_at || new Date(n.expires_at) > now)
+                    );
+                    return activeNudge ? (
+                      <div style={{marginBottom:"1rem",padding:".85rem 1.1rem",background:hexToRgba(sc,0.08),border:`1px solid ${hexToRgba(sc,0.3)}`,borderRadius:10,display:"flex",alignItems:"flex-start",gap:".75rem"}}>
+                        <span style={{fontSize:"1.1rem",flexShrink:0}}>📣</span>
+                        <div>
+                          <div style={{fontWeight:500,fontSize:".85rem",color:sc,marginBottom:".2rem"}}>{activeNudge.title}</div>
+                          <div style={{fontSize:".78rem",color:P.muted}}>{activeNudge.message}</div>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
                   {schoolEvents.length > 0 && (
                     <div className="countdown-section">
                       <SchoolAdBanner ads={ads} schoolId={activeSchoolFilter.id}/>
@@ -3531,8 +3547,8 @@ export default function TutuTrade() {
               </div>
             )}
 
-            {/* ── BOARD VIEW ── */}
-            {view === "board" && (
+            {/* BOARD REMOVED — replaced by direct messaging */}
+            {false && (
               <div style={{maxWidth:720,paddingTop:"1.5rem"}}>
                 <div style={{marginBottom:"2rem",paddingBottom:"1.5rem",borderBottom:`1px solid ${P.border}`}}>
                   <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"1.5rem",color:P.accentSoft,marginBottom:".3rem"}}>💬 Community Board</h2>
@@ -3756,7 +3772,7 @@ export default function TutuTrade() {
             {view === "wanted" && (
               <div style={{maxWidth:720,paddingTop:"1.5rem"}}>
                 <div style={{marginBottom:"2rem",paddingBottom:"1.5rem",borderBottom:`1px solid ${P.border}`}}>
-                  <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"1.5rem",color:P.accentSoft,marginBottom:".3rem"}}>🔍 What's Needed</h2>
+                  <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"1.5rem",color:P.accentSoft,marginBottom:".3rem"}}>✨ Wishes</h2>
                   <p style={{fontSize:".82rem",color:P.muted}}>Post items you're looking for — sellers can contact you directly.</p>
                 </div>
 
