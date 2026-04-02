@@ -3342,9 +3342,9 @@ export default function TutuTrade() {
             )}
 
             <div className="landing-features">
-              <div className="landing-feature"><div className="landing-feature-icon">🔒</div><div className="landing-feature-title">Private & secure</div><div className="landing-feature-desc">Only parents from your dance school can see listings</div></div>
+              <div className="landing-feature"><div className="landing-feature-icon">🏫</div><div className="landing-feature-title">School community</div><div className="landing-feature-desc">Browse freely — only verified school members can post listings or contact sellers</div></div>
               <div className="landing-feature"><div className="landing-feature-icon">💰</div><div className="landing-feature-title">Save money</div><div className="landing-feature-desc">Buy pre-loved costumes at a fraction of the original price</div></div>
-              <div className="landing-feature"><div className="landing-feature-icon">🩰</div><div className="landing-feature-title">Dance community</div><div className="landing-feature-desc">Trade with parents you already know and trust</div></div>
+              <div className="landing-feature"><div className="landing-feature-icon">🩰</div><div className="landing-feature-title">Trusted sellers</div><div className="landing-feature-desc">Every seller is a verified parent from your dance school</div></div>
             </div>
           </div>
 
