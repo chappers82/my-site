@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Fragment, useMemo } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { supabase } from "./supabase.js";
 
 // ─── COLOURS (must be first — used by getCSS and components) ──────────────
@@ -2250,9 +2250,9 @@ export default function TutuTrade() {
     setCopiedLink(code); setTimeout(() => setCopiedLink(null), 2000);
   };
 
-  const userSchoolIds = useMemo(() => userSchools.map(us => us.school_id), [userSchools]);
+  const userSchoolIds = userSchools.map(us => us.school_id);
 
-  const filtered = useMemo(() => listings.filter(l => {
+  const filtered = listings.filter(l => {
     if (view === "mylistings") return l.seller_email === user?.email;
     if (!user) return false;
     const lSchoolIds = l.school_ids?.length ? l.school_ids : (l.school_id ? [l.school_id] : []);
@@ -2269,10 +2269,10 @@ export default function TutuTrade() {
       if (!lIds.includes(filters.school)) return false;
     }
     return true;
-  }), [listings, view, user, userSchoolIds, showSold, filters]);
+  });
 
   // Listings visible to non-logged-in guests (school filter only, no sold items)
-  const guestFiltered = useMemo(() => !user && filters.school ? listings.filter(l => {
+  const guestFiltered = !user && filters.school ? listings.filter(l => {
     if (l.sold) return false;
     const lIds = l.school_ids?.length ? l.school_ids : (l.school_id ? [l.school_id] : []);
     if (!lIds.includes(filters.school)) return false;
@@ -2282,7 +2282,7 @@ export default function TutuTrade() {
     if (filters.size && l.size !== filters.size) return false;
     if (filters.maxPrice && l.price > Number(filters.maxPrice)) return false;
     return true;
-  }) : [], [listings, user, filters]);
+  }) : [];
 
   const activeSchoolFilter = filters.school ? getSchool(filters.school) : null;
   const activeSchoolId = activeSchoolFilter?.id || null;
