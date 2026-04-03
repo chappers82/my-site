@@ -1315,7 +1315,6 @@ export default function TutuTrade() {
     const primarySchool = selectedSchools[0] || null;
     const { error } = await supabase.from("listings").insert([{
       title, style, size, condition, price: Number(price),
-      item_type: createForm.itemType || null,
       description: createForm.description,
       image: createForm.image,
       images: createForm.images || [],
