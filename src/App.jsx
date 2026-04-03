@@ -965,15 +965,15 @@ export default function TutuTrade() {
   }, [filters.search]);
 
   const loadListings = async () => {
+    // Explicit columns — excludes `image` and `images` (large base64 blobs that cause statement timeouts).
+    // `item_type` intentionally omitted — column does not exist in this DB schema.
     const { data, error } = await supabase.from("listings")
-      .select("*")
+      .select("id,title,style,size,condition,price,description,seller_name,seller_email,seller_paypal,school_name,school_id,school_ids,expires_at,expired,expiry_warned,sold,sold_at,created_at,renewed_at")
       .order("created_at",{ascending:false}).limit(500);
     if (error) { console.error("loadListings error:", error); setListingsError(error.message); return; }
     if (data) {
       setListingsError(null);
-      // eslint-disable-next-line no-unused-vars
-      const stripped = data.map(({ image: _i, images: _is, ...rest }) => rest);
-      setListings(stripped);
+      setListings(data);
       if (pendingListingId.current) {
         const found = data.find(l => l.id === pendingListingId.current);
         if (found) { setSelectedListing(found); setModal("detail"); loadComments(found.id); loadListingImages(found.id); pendingListingId.current = null; }
@@ -1393,9 +1393,8 @@ export default function TutuTrade() {
     }
     setSavingListing(false);
     if (createError2) return setCreateError(`Failed to create listing: ${createError2.message}`);
-    // Fetch the new listing by ID — SELECT * then strip images to match loadListings shape
-    const { data: newListings } = await supabase.from("listings").select("*").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
-    if (newListings?.[0]) { const { image: _i, images: _is, ...newL } = newListings[0]; setListings(prev => [newL, ...prev]); await checkWishlistMatches(newL); }
+    const { data: newListings } = await supabase.from("listings").select("id,title,style,size,condition,price,description,seller_name,seller_email,seller_paypal,school_name,school_id,school_ids,expires_at,expired,expiry_warned,sold,sold_at,created_at,renewed_at").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
+    if (newListings?.[0]) { setListings(prev => [newListings[0], ...prev]); await checkWishlistMatches(newListings[0]); }
     setCreateForm({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
     closeModal(); setSuccess("Your listing is now live!");
   };
