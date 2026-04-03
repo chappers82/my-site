@@ -1277,6 +1277,7 @@ export default function TutuTrade() {
     const primarySchool = selectedSchools[0] || null;
     const { error } = await supabase.from("listings").insert([{
       title, style, size, condition, price: Number(price),
+      item_type: createForm.itemType || null,
       description: createForm.description,
       image: createForm.image,
       images: createForm.images || [],
@@ -1288,7 +1289,7 @@ export default function TutuTrade() {
       school_ids: isGeneral ? [] : schoolIds,
       expires_at: new Date(Date.now() + 60*24*60*60*1000).toISOString(),
     }]);
-    if (error) return setCreateError("Failed to create listing. Please try again.");
+    if (error) return setCreateError(`Failed to create listing: ${error.message}`);
     await loadListings();
     const { data: newListings } = await supabase.from("listings").select("*").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
     if (newListings?.[0]) await checkWishlistMatches(newListings[0]);
