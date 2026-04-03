@@ -1031,6 +1031,27 @@ export default function TutuTrade() {
     await supabase.from(table).delete().eq("name", name);
     await loadDropdowns();
   };
+  const sortSizes = (arr) => {
+    const clothingOrder = ["XS","S","M","L","XL","XXL"];
+    return [...arr].sort((a, b) => {
+      const ageA = a.match(/^Age (\d+)/), ageB = b.match(/^Age (\d+)/);
+      if (ageA && ageB) return parseInt(ageA[1]) - parseInt(ageB[1]);
+      if (ageA) return -1; if (ageB) return 1;
+      const teenA = a.match(/^Teen (.+)/), teenB = b.match(/^Teen (.+)/);
+      if (teenA && teenB) return clothingOrder.indexOf(teenA[1]) - clothingOrder.indexOf(teenB[1]);
+      if (teenA) return -1; if (teenB) return 1;
+      const adultA = a.match(/^Adult (.+)/), adultB = b.match(/^Adult (.+)/);
+      if (adultA && adultB) return clothingOrder.indexOf(adultA[1]) - clothingOrder.indexOf(adultB[1]);
+      if (adultA) return -1; if (adultB) return 1;
+      const ukA = a.match(/^UK (\d+)/), ukB = b.match(/^UK (\d+)/);
+      if (ukA && ukB) {
+        const infA = a.includes("Infant"), infB = b.includes("Infant");
+        if (infA && !infB) return -1; if (!infA && infB) return 1;
+        return parseInt(ukA[1]) - parseInt(ukB[1]);
+      }
+      return a.localeCompare(b);
+    });
+  };
   const loadDropdowns = async () => {
     const [ds, sz, cn] = await Promise.all([
       supabase.from("dance_styles").select("*").order("sort_order"),
@@ -1038,7 +1059,7 @@ export default function TutuTrade() {
       supabase.from("conditions").select("*").order("sort_order"),
     ]);
     if (ds.data?.length) setDanceStyles(ds.data.map(d => d.name).sort((a,b) => a.localeCompare(b)));
-    if (sz.data?.length) setSizes(sz.data.map(s => s.name));
+    if (sz.data?.length) setSizes(sortSizes(sz.data.map(s => s.name)));
     if (cn.data?.length) setConditions(cn.data.map(c => c.name));
   };
 
@@ -1064,7 +1085,12 @@ export default function TutuTrade() {
     return { d, h, m, s };
   };
   const loadUserSchools = async (email) => {
-    const { data } = await supabase.from("user_schools").select("*").eq("user_email", email);
+    let { data, error } = await supabase.from("user_schools").select("*").eq("user_email", email);
+    if (error || !data) {
+      // Retry once after a short delay
+      await new Promise(r => setTimeout(r, 1200));
+      ({ data, error } = await supabase.from("user_schools").select("*").eq("user_email", email));
+    }
     if (data) {
       setUserSchools(data);
       // Auto-filter to their school if they only belong to one
@@ -1157,7 +1183,10 @@ export default function TutuTrade() {
     try { await supabase.from("analytics_events").insert([{ event_type: "login", user_email: email, metadata: {} }]); } catch {}
   };
 
-  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setUserSchools([]); setIsAdmin(false); setView("browse"); };
+  const handleLogout = async () => {
+    try { await supabase.auth.signOut(); } catch (e) { console.error("Sign out error:", e); }
+    setUser(null); setUserSchools([]); setIsAdmin(false); setNotifPrefs(DEFAULT_NOTIF_PREFS); setFavourites([]); setConversations([]); setOffers([]); setView("browse");
+  };
 
   const handleAddSchool = async () => {
     setAddSchoolError("");
