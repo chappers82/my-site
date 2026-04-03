@@ -912,7 +912,11 @@ export default function TutuTrade() {
       }
       else { setUserSchools([]); setIsAdmin(false); setNotifPrefs(DEFAULT_NOTIF_PREFS); setFavourites([]); setConversations([]); }
     });
-    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadCommentCounts(); loadWantedPosts(); loadFairyName(); loadRatings(); loadNudges();
+    // Critical first — listings, schools, dropdowns needed for initial render
+    Promise.all([loadListings(), loadSchools(), loadDropdowns(), loadSettings()]).then(() => {
+      // Defer non-critical loads until after first paint
+      loadAds(); loadEvents(); loadCommentCounts(); loadWantedPosts(); loadRatings(); loadNudges();
+    });
     const ticker = setInterval(() => setTick(t => t + 1), 1000);
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
   }, []);
@@ -985,6 +989,10 @@ export default function TutuTrade() {
   const loadWantedPosts = async () => { const { data } = await supabase.from("wanted_posts").select("*").order("created_at",{ascending:false}).limit(200); if (data) setWantedPosts(data); };
   const loadCommission = async () => { const { data } = await supabase.from("settings").select("value").eq("key","commission_pct").single(); if (data) setCommissionPct(parseFloat(data.value)); };
   const loadFairyName = async () => { const { data } = await supabase.from("settings").select("value").eq("key","fairy_name").single(); if (data) setFairyName(data.value); };
+  const loadSettings = async () => {
+    const { data } = await supabase.from("settings").select("key,value").in("key", ["commission_pct","fairy_name"]);
+    if (data) { data.forEach(r => { if (r.key==="commission_pct") setCommissionPct(parseFloat(r.value)); if (r.key==="fairy_name") setFairyName(r.value); }); }
+  };
   const loadFavourites = async (email) => { const e = email || user?.email; if (!e) return; const { data } = await supabase.from("favourites").select("*").eq("user_email", e); if (data) setFavourites(data); };
   const loadRatings = async () => { const { data } = await supabase.from("seller_ratings").select("*").limit(500); if (data) setRatings(data); };
   const loadConversations = async (email) => {
@@ -1472,8 +1480,7 @@ export default function TutuTrade() {
       school_name: isGeneral ? "General" : selectedSchools.map(s => s.name).join(", "),
       ...(editForm.expires_at ? { expires_at: new Date(editForm.expires_at).toISOString(), expired: false, expiry_warned: false } : {}),
     };
-    let query = supabase.from("listings").update(updates).eq("id", selectedListing.id);
-    const { error } = await query;
+    const { error } = await supabase.from("listings").update(updates).eq("id", selectedListing.id);
     if (error) {
       console.error("Update error:", error);
       return setEditError(`Failed to update: ${error.message}`);
