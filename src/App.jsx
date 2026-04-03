@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment, useMemo } from "react";
 import { supabase } from "./supabase.js";
 
 // ─── COLOURS (must be first — used by getCSS and components) ──────────────
@@ -993,15 +993,15 @@ export default function TutuTrade() {
   const loadSchools = async () => { const { data } = await supabase.from("schools").select("*").order("name"); if (data) setSchools(data); };
   const loadComments = async (listingId) => { const { data } = await supabase.from("listing_comments").select("*").eq("listing_id", listingId).order("created_at"); if (data) setComments(data); };
   const loadCommentCounts = async () => {
-    const { data } = await supabase.from("listing_comments").select("listing_id").is("parent_id", null);
+    const { data } = await supabase.from("listing_comments").select("listing_id").is("parent_id", null).limit(2000);
     if (data) {
       const counts = {};
       data.forEach(c => { counts[c.listing_id] = (counts[c.listing_id] || 0) + 1; });
       setCommentCounts(counts);
     }
   };
-  const loadBoardPosts = async () => { const { data } = await supabase.from("board_posts").select("*").order("created_at",{ascending:false}); if (data) setBoardPosts(data); };
-  const loadBoardReplies = async () => { const { data } = await supabase.from("board_replies").select("*").order("created_at"); if (data) setBoardReplies(data); };
+  const loadBoardPosts = async () => { const { data } = await supabase.from("board_posts").select("*").order("created_at",{ascending:false}).limit(200); if (data) setBoardPosts(data); };
+  const loadBoardReplies = async () => { const { data } = await supabase.from("board_replies").select("*").order("created_at").limit(500); if (data) setBoardReplies(data); };
   const loadWantedPosts = async () => { const { data } = await supabase.from("wanted_posts").select("*").order("created_at",{ascending:false}).limit(200); if (data) setWantedPosts(data); };
   const loadCommission = async () => { const { data } = await supabase.from("settings").select("value").eq("key","commission_pct").single(); if (data) setCommissionPct(parseFloat(data.value)); };
   const loadFairyName = async () => { const { data } = await supabase.from("settings").select("value").eq("key","fairy_name").single(); if (data) setFairyName(data.value); };
@@ -1291,13 +1291,14 @@ export default function TutuTrade() {
 
   const handleImageUpload = (e, setter) => {
     const file = e.target.files[0]; if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert("Image must be under 5MB. Please choose a smaller file or reduce the photo size."); e.target.value = ""; return; }
     const reader = new FileReader();
     reader.onload = ev => setter(f => ({ ...f, image: ev.target.result }));
     reader.readAsDataURL(file);
   };
 
   const handleMultiImageUpload = (e) => {
-    const files = Array.from(e.target.files).slice(0, 5);
+    const files = Array.from(e.target.files).slice(0, 5 - (createForm.images?.length || 0)).filter(f => { if (f.size > 5*1024*1024) { alert(`"${f.name}" is over 5MB — please use a smaller photo.`); return false; } return true; });
     files.forEach(file => {
       const reader = new FileReader();
       reader.onload = ev => setCreateForm(f => ({
@@ -1440,7 +1441,7 @@ export default function TutuTrade() {
 
   const handleDeleteSchool = async (school) => {
     await supabase.from("schools").delete().eq("id", school.id);
-    await loadSchools(); await loadAllUserSchools(); await loadListings();
+    await Promise.all([loadSchools(), loadAllUserSchools(), loadListings()]);
     setConfirmDeleteSchool(null); setSuccess(`${school.name} removed.`);
   };
 
@@ -1574,7 +1575,7 @@ export default function TutuTrade() {
   };
 
   const handleEditMultiImageUpload = (e) => {
-    const files = Array.from(e.target.files).slice(0, 5 - (editForm.images?.length || 0));
+    const files = Array.from(e.target.files).slice(0, 5 - (editForm.images?.length || 0)).filter(f => { if (f.size > 5*1024*1024) { alert(`"${f.name}" is over 5MB — please use a smaller photo.`); return false; } return true; });
     files.forEach(file => {
       const reader = new FileReader();
       reader.onload = ev => setEditForm(f => ({ ...f, images: [...(f.images||[]), ev.target.result].slice(0,5) }));
@@ -1590,24 +1591,29 @@ export default function TutuTrade() {
   const handlePostComment = async () => {
     if (!commentText.trim() || !selectedListing) return;
     const userName = user.user_metadata?.full_name || user.email;
-    await supabase.from("listing_comments").insert([{
+    const msgText = commentText.trim();
+    // Optimistic: show comment immediately
+    const optimistic = { id: `opt-${Date.now()}`, listing_id: selectedListing.id, user_email: user.email, user_name: userName, message: msgText, created_at: new Date().toISOString(), parent_id: null };
+    setComments(prev => [...prev, optimistic]);
+    setCommentCounts(prev => ({ ...prev, [selectedListing.id]: (prev[selectedListing.id] || 0) + 1 }));
+    setCommentText("");
+    const { data: inserted } = await supabase.from("listing_comments").insert([{
       listing_id: selectedListing.id,
       user_email: user.email,
       user_name: userName,
-      message: commentText.trim(),
-    }]);
-    await loadComments(selectedListing.id);
-    setCommentText("");
-    await loadCommentCounts();
+      message: msgText,
+    }]).select().single();
+    // Replace optimistic entry with real DB row
+    if (inserted) setComments(prev => prev.map(c => c.id === optimistic.id ? inserted : c));
     if (selectedListing.seller_email !== user.email) {
       const tutuCmtPrefs = await getPrefsForEmail(selectedListing.seller_email);
-      if (tutuCmtPrefs.new_comment?.inapp !== false) await pushNotification(selectedListing.seller_email, "new_comment", "💬 New question on your listing", `${userName}: "${commentText.trim()}"`, selectedListing.id);
+      if (tutuCmtPrefs.new_comment?.inapp !== false) await pushNotification(selectedListing.seller_email, "new_comment", "💬 New question on your listing", `${userName}: "${msgText}"`, selectedListing.id);
       if (tutuCmtPrefs.new_comment?.email !== false) await sendResendEmail({
         to: selectedListing.seller_email,
         subject: `💬 New question on your listing — ${selectedListing.title}`,
         html: emailTemplate("Someone asked a question!", `
           <p style="color:#a892c4;margin-bottom:1rem"><strong style="color:#f0eaf8">${userName}</strong> asked a question on your listing <strong style="color:#e8d5aa">${selectedListing.title}</strong>:</p>
-          <div style="padding:1rem;background:#2d2142;border-left:3px solid #c9a96e;border-radius:6px;color:#f0eaf8;margin-bottom:1.25rem">${commentText.trim()}</div>
+          <div style="padding:1rem;background:#2d2142;border-left:3px solid #c9a96e;border-radius:6px;color:#f0eaf8;margin-bottom:1.25rem">${msgText}</div>
           <p style="color:#a892c4">Log in to TutuTrade to reply — your response will be visible to all buyers.</p>
         `),
       });
@@ -1624,19 +1630,22 @@ export default function TutuTrade() {
     const userName = user.user_metadata?.full_name || user.email;
     // Find the original commenter to notify
     const originalComment = comments.find(c => c.id === parentId);
-    await supabase.from("listing_comments").insert([{
+    const replyText = commentReplyText.trim();
+    const optimisticReply = { id: `opt-${Date.now()}`, listing_id: selectedListing.id, user_email: user.email, user_name: userName, message: replyText, parent_id: parentId, created_at: new Date().toISOString() };
+    setComments(prev => [...prev, optimisticReply]);
+    setCommentReplyText("");
+    setReplyingTo(null);
+    const { data: insertedReply } = await supabase.from("listing_comments").insert([{
       listing_id: selectedListing.id,
       user_email: user.email,
       user_name: userName,
-      message: commentReplyText.trim(),
+      message: replyText,
       parent_id: parentId,
-    }]);
-    await loadComments(selectedListing.id);
-    setCommentReplyText("");
-    setReplyingTo(null);
+    }]).select().single();
+    if (insertedReply) setComments(prev => prev.map(c => c.id === optimisticReply.id ? insertedReply : c));
     if (originalComment && originalComment.user_email !== user.email) {
       const tutuRplyPrefs = await getPrefsForEmail(originalComment.user_email);
-      if (tutuRplyPrefs.comment_reply?.inapp !== false) await pushNotification(originalComment.user_email, "comment_reply", "↩ Reply to your question", `${userName}: "${commentReplyText.trim()}"`, selectedListing.id);
+      if (tutuRplyPrefs.comment_reply?.inapp !== false) await pushNotification(originalComment.user_email, "comment_reply", "↩ Reply to your question", `${userName}: "${replyText}"`, selectedListing.id);
       if (tutuRplyPrefs.comment_reply?.email !== false) await sendResendEmail({
         to: originalComment.user_email,
         subject: `↩ Someone replied to your question on TutuTrade`,
@@ -1644,7 +1653,7 @@ export default function TutuTrade() {
           <p style="color:#a892c4;margin-bottom:.5rem">Your question on <strong style="color:#e8d5aa">${selectedListing.title}</strong>:</p>
           <div style="padding:.75rem 1rem;background:#2d2142;border-radius:6px;color:#8a7a9e;margin-bottom:1rem;font-style:italic">${originalComment.message}</div>
           <p style="color:#a892c4;margin-bottom:.5rem"><strong style="color:#f0eaf8">${userName}</strong> replied:</p>
-          <div style="padding:1rem;background:#2d2142;border-left:3px solid #c9a96e;border-radius:6px;color:#f0eaf8;margin-bottom:1.25rem">${commentReplyText.trim()}</div>
+          <div style="padding:1rem;background:#2d2142;border-left:3px solid #c9a96e;border-radius:6px;color:#f0eaf8;margin-bottom:1.25rem">${replyText}</div>
           <p style="color:#a892c4">Visit TutuTrade to continue the conversation.</p>
         `),
       });
@@ -1765,7 +1774,7 @@ export default function TutuTrade() {
   };
 
   const checkWishlistMatches = async (listing) => {
-    const { data: wanted } = await supabase.from("wanted_posts").select("*").eq("fulfilled", false);
+    const { data: wanted } = await supabase.from("wanted_posts").select("*").eq("fulfilled", false).limit(100);
     if (!wanted) return;
     for (const w of wanted) {
       if (w.user_email === listing.seller_email) continue;
@@ -1841,7 +1850,7 @@ export default function TutuTrade() {
   const loadAnalytics = async (days) => {
     const d = days || analyticsRange;
     const since = new Date(Date.now() - d * 24 * 60 * 60 * 1000).toISOString();
-    const { data } = await supabase.from("analytics_events").select("*").gte("created_at", since).order("created_at");
+    const { data } = await supabase.from("analytics_events").select("*").gte("created_at", since).order("created_at").limit(5000);
     if (data) setAnalyticsData(data);
   };
 
@@ -2222,12 +2231,11 @@ export default function TutuTrade() {
     setCopiedLink(code); setTimeout(() => setCopiedLink(null), 2000);
   };
 
-  const userSchoolIds = userSchools.map(us => us.school_id);
+  const userSchoolIds = useMemo(() => userSchools.map(us => us.school_id), [userSchools]);
 
-  const filtered = listings.filter(l => {
+  const filtered = useMemo(() => listings.filter(l => {
     if (view === "mylistings") return l.seller_email === user?.email;
     if (!user) return false;
-    // Show general listings (no schools) + listings from any of user's schools
     const lSchoolIds = l.school_ids?.length ? l.school_ids : (l.school_id ? [l.school_id] : []);
     if (lSchoolIds.length > 0 && !lSchoolIds.some(id => userSchoolIds.includes(id))) return false;
     if (!showSold && l.sold) return false;
@@ -2242,10 +2250,10 @@ export default function TutuTrade() {
       if (!lIds.includes(filters.school)) return false;
     }
     return true;
-  });
+  }), [listings, view, user, userSchoolIds, showSold, filters]);
 
   // Listings visible to non-logged-in guests (school filter only, no sold items)
-  const guestFiltered = !user && filters.school ? listings.filter(l => {
+  const guestFiltered = useMemo(() => !user && filters.school ? listings.filter(l => {
     if (l.sold) return false;
     const lIds = l.school_ids?.length ? l.school_ids : (l.school_id ? [l.school_id] : []);
     if (!lIds.includes(filters.school)) return false;
@@ -2255,7 +2263,7 @@ export default function TutuTrade() {
     if (filters.size && l.size !== filters.size) return false;
     if (filters.maxPrice && l.price > Number(filters.maxPrice)) return false;
     return true;
-  }) : [];
+  }) : [], [listings, user, filters]);
 
   const activeSchoolFilter = filters.school ? getSchool(filters.school) : null;
   const activeSchoolId = activeSchoolFilter?.id || null;
