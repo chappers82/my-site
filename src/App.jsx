@@ -963,9 +963,10 @@ export default function TutuTrade() {
   }, [filters.search]);
 
   const loadListings = async () => {
-    // Exclude `images` (array of base64 photos) — fetched on-demand per listing to keep this payload small
+    // Exclude image + images (base64 columns) — fetched on-demand when a listing is opened
+    // This keeps the bulk fetch to metadata only, making initial load fast regardless of how many photos exist
     const { data } = await supabase.from("listings")
-      .select("id,title,style,size,condition,price,image,school_id,school_ids,school_name,seller_email,seller_name,seller_paypal,sold,sold_at,created_at,expires_at,expired,expiry_warned,description,item_type")
+      .select("id,title,style,size,condition,price,school_id,school_ids,school_name,seller_email,seller_name,seller_paypal,sold,sold_at,created_at,expires_at,expired,expiry_warned,description,item_type")
       .order("created_at",{ascending:false}).limit(500);
     if (data) {
       setListings(data);
@@ -979,13 +980,13 @@ export default function TutuTrade() {
       }
     }
   };
-  // Lazy-load the images array for a single listing (kept out of bulk fetch to reduce payload)
+  // Lazy-load photo data for a single listing when its detail or edit modal is opened
   const loadListingImages = async (listingId) => {
-    const { data } = await supabase.from("listings").select("images").eq("id", listingId).single();
+    const { data } = await supabase.from("listings").select("image,images").eq("id", listingId).single();
     if (data) {
-      const imgs = data.images || [];
-      setListings(prev => prev.map(l => l.id === listingId ? { ...l, images: imgs } : l));
-      setSelectedListing(prev => prev?.id === listingId ? { ...prev, images: imgs } : prev);
+      const patch = { image: data.image || null, images: data.images || [] };
+      setListings(prev => prev.map(l => l.id === listingId ? { ...l, ...patch } : l));
+      setSelectedListing(prev => prev?.id === listingId ? { ...prev, ...patch } : prev);
     }
   };
   const loadAds = async () => { const { data } = await supabase.from("ads").select("*").order("sort_order").order("created_at",{ascending:false}); if (data) setAds(data); };
@@ -1373,8 +1374,8 @@ export default function TutuTrade() {
       }
     }
     if (createError2) return setCreateError(`Failed to create listing: ${createError2.message}`);
-    // Fetch just the new listing to get its ID, then add to local state (omit images — same as loadListings)
-    const { data: newListings } = await supabase.from("listings").select("id,title,style,size,condition,price,image,school_id,school_ids,school_name,seller_email,seller_name,seller_paypal,sold,sold_at,created_at,expires_at,expired,expiry_warned,description,item_type").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
+    // Fetch just the new listing to get its ID — omit image/images to match loadListings payload
+    const { data: newListings } = await supabase.from("listings").select("id,title,style,size,condition,price,school_id,school_ids,school_name,seller_email,seller_name,seller_paypal,sold,sold_at,created_at,expires_at,expired,expiry_warned,description,item_type").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
     if (newListings?.[0]) { setListings(prev => [newListings[0], ...prev]); await checkWishlistMatches(newListings[0]); }
     setCreateForm({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
     closeModal(); setSuccess("Your listing is now live!");
@@ -1485,8 +1486,8 @@ export default function TutuTrade() {
     // Ensure images are loaded before populating the edit form
     let full = listing;
     if (full.images === undefined) {
-      const { data } = await supabase.from("listings").select("images").eq("id", listing.id).single();
-      full = { ...listing, images: data?.images || [] };
+      const { data } = await supabase.from("listings").select("image,images").eq("id", listing.id).single();
+      full = { ...listing, image: data?.image || null, images: data?.images || [] };
       setListings(prev => prev.map(l => l.id === listing.id ? full : l));
       setSelectedListing(prev => prev?.id === listing.id ? full : prev);
     }
