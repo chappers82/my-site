@@ -3294,7 +3294,7 @@ export default function TutuTrade() {
                   </div>
                 ) : (
                   <>
-                    <div className="grid" style={{marginBottom:"1rem"}}>
+                    <div className="grid" style={{marginBottom:"1rem",width:"100%"}}>
                       {guestFiltered.slice(0, 6).map(l => {
                         const sc = getSchoolColor(l.school_id);
                         return (
