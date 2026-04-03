@@ -900,7 +900,8 @@ export default function TutuTrade() {
       setUser(session?.user ?? null);
       if (session?.user) {
         setIsAdmin(session.user.email === ADMIN_EMAIL);
-        Promise.all([loadUserSchools(session.user.email), loadNotifPrefs(session.user.email), loadFavourites(session.user.email), loadConversations(session.user.email), loadOffers(), loadMySchoolAdminRole(session.user.email)]);
+        loadUserSchools(session.user.email);
+        setTimeout(() => { loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadMySchoolAdminRole(session.user.email); }, 600);
       }
       setLoading(false);
     });
@@ -908,14 +909,16 @@ export default function TutuTrade() {
       setUser(session?.user ?? null);
       if (session?.user) {
         setIsAdmin(session.user.email === ADMIN_EMAIL);
-        Promise.all([loadUserSchools(session.user.email), loadNotifPrefs(session.user.email), loadFavourites(session.user.email), loadConversations(session.user.email), loadOffers(), loadMySchoolAdminRole(session.user.email)]);
+        loadUserSchools(session.user.email);
+        setTimeout(() => { loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadMySchoolAdminRole(session.user.email); }, 600);
       }
       else { setUserSchools([]); setIsAdmin(false); setNotifPrefs(DEFAULT_NOTIF_PREFS); setFavourites([]); setConversations([]); }
     });
-    // Critical first — listings, schools, dropdowns needed for initial render
+    // Critical: only what's needed to render the page
     Promise.all([loadListings(), loadSchools(), loadDropdowns(), loadSettings()]).then(() => {
-      // Defer non-critical loads until after first paint
-      loadAds(); loadEvents(); loadCommentCounts(); loadWantedPosts(); loadRatings(); loadNudges();
+      // Deferred: load after paint, with stagger to avoid hammering Supabase
+      setTimeout(() => { loadAds(); loadNudges(); }, 800);
+      setTimeout(() => { loadCommentCounts(); loadRatings(); }, 1600);
     });
     const ticker = setInterval(() => setTick(t => t + 1), 1000);
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
@@ -1321,28 +1324,51 @@ export default function TutuTrade() {
     const isGeneral = !schoolIds || schoolIds.length === 0;
     const selectedSchools = isGeneral ? [] : userSchools.filter(s => schoolIds.includes(s.school_id));
     const primarySchool = selectedSchools[0] || null;
-    const { error } = await supabase.from("listings").insert([{
-      title, style, size, condition, price: Number(price),
-      description: createForm.description,
-      image: createForm.image,
-      images: createForm.images || [],
-      seller_name: user.user_metadata?.full_name || user.email,
-      seller_email: user.email,
-      seller_paypal: user.user_metadata?.paypal_email || null,
-      school_name: isGeneral ? "General" : selectedSchools.map(s => s.school_name).join(", "),
-      school_id: primarySchool?.school_id || null,
-      school_ids: isGeneral ? [] : schoolIds,
-      expires_at: new Date(Date.now() + 60*24*60*60*1000).toISOString(),
-    }]);
-    if (error) return setCreateError(`Failed to create listing: ${error.message}`);
-    await loadListings();
+    let createError2;
+    try {
+      ({ error: createError2 } = await supabase.from("listings").insert([{
+        title, style, size, condition, price: Number(price),
+        description: createForm.description,
+        image: createForm.image,
+        images: createForm.images || [],
+        seller_name: user.user_metadata?.full_name || user.email,
+        seller_email: user.email,
+        seller_paypal: user.user_metadata?.paypal_email || null,
+        school_name: isGeneral ? "General" : selectedSchools.map(s => s.school_name).join(", "),
+        school_id: primarySchool?.school_id || null,
+        school_ids: isGeneral ? [] : schoolIds,
+        expires_at: new Date(Date.now() + 60*24*60*60*1000).toISOString(),
+      }]));
+    } catch (netErr) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        ({ error: createError2 } = await supabase.from("listings").insert([{
+          title, style, size, condition, price: Number(price),
+          description: createForm.description,
+          image: createForm.image,
+          images: createForm.images || [],
+          seller_name: user.user_metadata?.full_name || user.email,
+          seller_email: user.email,
+          seller_paypal: user.user_metadata?.paypal_email || null,
+          school_name: isGeneral ? "General" : selectedSchools.map(s => s.school_name).join(", "),
+          school_id: primarySchool?.school_id || null,
+          school_ids: isGeneral ? [] : schoolIds,
+          expires_at: new Date(Date.now() + 60*24*60*60*1000).toISOString(),
+        }]));
+      } catch (retryErr) {
+        console.error("Create retry failed:", retryErr);
+        return setCreateError("Connection problem — please check your internet and try again.");
+      }
+    }
+    if (createError2) return setCreateError(`Failed to create listing: ${createError2.message}`);
+    // Fetch just the new listing to get its ID, then add to local state
     const { data: newListings } = await supabase.from("listings").select("*").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
-    if (newListings?.[0]) await checkWishlistMatches(newListings[0]);
+    if (newListings?.[0]) { setListings(prev => [newListings[0], ...prev]); await checkWishlistMatches(newListings[0]); }
     setCreateForm({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
     closeModal(); setSuccess("Your listing is now live!");
   };
 
-  const handleDelete = async (id) => { await supabase.from("listings").delete().eq("id", id); await loadListings(); closeModal(); };
+  const handleDelete = async (id) => { await supabase.from("listings").delete().eq("id", id); setListings(prev => prev.filter(l => l.id !== id)); closeModal(); };
   const handleMarkSold = async (id) => {
     await supabase.from("listings").update({ sold: true, sold_at: new Date().toISOString() }).eq("id", id);
     const listing = listings.find(l => l.id === id);
@@ -1364,11 +1390,11 @@ export default function TutuTrade() {
         `),
       });
     }
-    await loadListings(); closeModal(); setSuccess("Item marked as sold! Payout email sent to your inbox.");
+    setListings(prev => prev.map(l => l.id === id ? { ...l, sold: true, sold_at: new Date().toISOString() } : l)); closeModal(); setSuccess("Item marked as sold! Payout email sent to your inbox.");
   };
   const handleMarkUnsold = async (id) => {
     await supabase.from("listings").update({ sold: false, sold_at: null }).eq("id", id);
-    await loadListings(); setSuccess("Item relisted!");
+    setListings(prev => prev.map(l => l.id === id ? { ...l, sold: false, sold_at: null } : l)); setSuccess("Item relisted!");
   };
   const handleSaveCommission = async (val) => {
     setCommissionPct(val);
@@ -1480,7 +1506,20 @@ export default function TutuTrade() {
       school_name: isGeneral ? "General" : selectedSchools.map(s => s.name).join(", "),
       ...(editForm.expires_at ? { expires_at: new Date(editForm.expires_at).toISOString(), expired: false, expiry_warned: false } : {}),
     };
-    const { error } = await supabase.from("listings").update(updates).eq("id", selectedListing.id);
+    // Attempt update with one automatic retry on network failure
+    let error;
+    try {
+      ({ error } = await supabase.from("listings").update(updates).eq("id", selectedListing.id));
+    } catch (netErr) {
+      // Network error (e.g. "TypeError: Failed to fetch") — wait 2s and retry once
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        ({ error } = await supabase.from("listings").update(updates).eq("id", selectedListing.id));
+      } catch (retryErr) {
+        console.error("Update retry failed:", retryErr);
+        return setEditError("Connection problem — please check your internet and try again.");
+      }
+    }
     if (error) {
       console.error("Update error:", error);
       return setEditError(`Failed to update: ${error.message}`);
@@ -1509,7 +1548,8 @@ export default function TutuTrade() {
         }
       }
     }
-    await loadListings(); closeModal(); setSuccess("Listing updated!");
+    setListings(prev => prev.map(l => l.id === selectedListing.id ? { ...l, ...updates, school_name: updates.school_name } : l));
+    closeModal(); setSuccess("Listing updated!");
   };
 
   const handleEditMultiImageUpload = (e) => {
@@ -1849,8 +1889,9 @@ export default function TutuTrade() {
   // ── RENEW LISTING ──
   const handleRenewListing = async (id) => {
     const expires_at = new Date(Date.now() + 60*24*60*60*1000).toISOString();
-    await supabase.from("listings").update({ expires_at, expired: false, expiry_warned: false, renewed_at: new Date().toISOString() }).eq("id", id);
-    await loadListings();
+    const renewed_at = new Date().toISOString();
+    await supabase.from("listings").update({ expires_at, expired: false, expiry_warned: false, renewed_at }).eq("id", id);
+    setListings(prev => prev.map(l => l.id === id ? { ...l, expires_at, expired: false, expiry_warned: false, renewed_at } : l));
     setSuccess("Listing renewed for another 60 days! 🎉");
   };
 
