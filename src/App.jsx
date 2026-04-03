@@ -1191,7 +1191,9 @@ export default function TutuTrade() {
 
   const handleLogout = async () => {
     try { await supabase.auth.signOut({ scope: "local" }); } catch (e) { console.error("Sign out error:", e); }
-    setUser(null); setUserSchools([]); setIsAdmin(false); setNotifPrefs(DEFAULT_NOTIF_PREFS); setFavourites([]); setConversations([]); setOffers([]);
+    // Wipe all Supabase session tokens from browser storage
+    try { Object.keys(localStorage).forEach(k => { if (k.startsWith("sb-")) localStorage.removeItem(k); }); } catch {}
+    try { Object.keys(sessionStorage).forEach(k => { if (k.startsWith("sb-")) sessionStorage.removeItem(k); }); } catch {}
     window.location.href = "/";
   };
 
