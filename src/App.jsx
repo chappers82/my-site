@@ -900,7 +900,8 @@ export default function TutuTrade() {
       setUser(session?.user ?? null);
       if (session?.user) {
         setIsAdmin(session.user.email === ADMIN_EMAIL);
-        Promise.all([loadUserSchools(session.user.email), loadNotifPrefs(session.user.email), loadFavourites(session.user.email), loadConversations(session.user.email), loadOffers(), loadMySchoolAdminRole(session.user.email)]);
+        loadUserSchools(session.user.email);
+        setTimeout(() => { loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadMySchoolAdminRole(session.user.email); }, 600);
       }
       setLoading(false);
     });
@@ -908,14 +909,16 @@ export default function TutuTrade() {
       setUser(session?.user ?? null);
       if (session?.user) {
         setIsAdmin(session.user.email === ADMIN_EMAIL);
-        Promise.all([loadUserSchools(session.user.email), loadNotifPrefs(session.user.email), loadFavourites(session.user.email), loadConversations(session.user.email), loadOffers(), loadMySchoolAdminRole(session.user.email)]);
+        loadUserSchools(session.user.email);
+        setTimeout(() => { loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadMySchoolAdminRole(session.user.email); }, 600);
       }
       else { setUserSchools([]); setIsAdmin(false); setNotifPrefs(DEFAULT_NOTIF_PREFS); setFavourites([]); setConversations([]); }
     });
-    // Critical first — listings, schools, dropdowns needed for initial render
+    // Critical: only what's needed to render the page
     Promise.all([loadListings(), loadSchools(), loadDropdowns(), loadSettings()]).then(() => {
-      // Defer non-critical loads until after first paint
-      loadAds(); loadEvents(); loadCommentCounts(); loadWantedPosts(); loadRatings(); loadNudges();
+      // Deferred: load after paint, with stagger to avoid hammering Supabase
+      setTimeout(() => { loadAds(); loadNudges(); }, 800);
+      setTimeout(() => { loadCommentCounts(); loadRatings(); }, 1600);
     });
     const ticker = setInterval(() => setTick(t => t + 1), 1000);
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
@@ -1335,14 +1338,14 @@ export default function TutuTrade() {
       expires_at: new Date(Date.now() + 60*24*60*60*1000).toISOString(),
     }]);
     if (error) return setCreateError(`Failed to create listing: ${error.message}`);
-    await loadListings();
+    // Fetch just the new listing to get its ID, then add to local state
     const { data: newListings } = await supabase.from("listings").select("*").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
-    if (newListings?.[0]) await checkWishlistMatches(newListings[0]);
+    if (newListings?.[0]) { setListings(prev => [newListings[0], ...prev]); await checkWishlistMatches(newListings[0]); }
     setCreateForm({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
     closeModal(); setSuccess("Your listing is now live!");
   };
 
-  const handleDelete = async (id) => { await supabase.from("listings").delete().eq("id", id); await loadListings(); closeModal(); };
+  const handleDelete = async (id) => { await supabase.from("listings").delete().eq("id", id); setListings(prev => prev.filter(l => l.id !== id)); closeModal(); };
   const handleMarkSold = async (id) => {
     await supabase.from("listings").update({ sold: true, sold_at: new Date().toISOString() }).eq("id", id);
     const listing = listings.find(l => l.id === id);
@@ -1364,11 +1367,11 @@ export default function TutuTrade() {
         `),
       });
     }
-    await loadListings(); closeModal(); setSuccess("Item marked as sold! Payout email sent to your inbox.");
+    setListings(prev => prev.map(l => l.id === id ? { ...l, sold: true, sold_at: new Date().toISOString() } : l)); closeModal(); setSuccess("Item marked as sold! Payout email sent to your inbox.");
   };
   const handleMarkUnsold = async (id) => {
     await supabase.from("listings").update({ sold: false, sold_at: null }).eq("id", id);
-    await loadListings(); setSuccess("Item relisted!");
+    setListings(prev => prev.map(l => l.id === id ? { ...l, sold: false, sold_at: null } : l)); setSuccess("Item relisted!");
   };
   const handleSaveCommission = async (val) => {
     setCommissionPct(val);
@@ -1509,7 +1512,8 @@ export default function TutuTrade() {
         }
       }
     }
-    await loadListings(); closeModal(); setSuccess("Listing updated!");
+    setListings(prev => prev.map(l => l.id === selectedListing.id ? { ...l, ...updates, school_name: updates.school_name } : l));
+    closeModal(); setSuccess("Listing updated!");
   };
 
   const handleEditMultiImageUpload = (e) => {
@@ -1849,8 +1853,9 @@ export default function TutuTrade() {
   // ── RENEW LISTING ──
   const handleRenewListing = async (id) => {
     const expires_at = new Date(Date.now() + 60*24*60*60*1000).toISOString();
-    await supabase.from("listings").update({ expires_at, expired: false, expiry_warned: false, renewed_at: new Date().toISOString() }).eq("id", id);
-    await loadListings();
+    const renewed_at = new Date().toISOString();
+    await supabase.from("listings").update({ expires_at, expired: false, expiry_warned: false, renewed_at }).eq("id", id);
+    setListings(prev => prev.map(l => l.id === id ? { ...l, expires_at, expired: false, expiry_warned: false, renewed_at } : l));
     setSuccess("Listing renewed for another 60 days! 🎉");
   };
 
