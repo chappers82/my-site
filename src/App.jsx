@@ -1324,20 +1324,43 @@ export default function TutuTrade() {
     const isGeneral = !schoolIds || schoolIds.length === 0;
     const selectedSchools = isGeneral ? [] : userSchools.filter(s => schoolIds.includes(s.school_id));
     const primarySchool = selectedSchools[0] || null;
-    const { error } = await supabase.from("listings").insert([{
-      title, style, size, condition, price: Number(price),
-      description: createForm.description,
-      image: createForm.image,
-      images: createForm.images || [],
-      seller_name: user.user_metadata?.full_name || user.email,
-      seller_email: user.email,
-      seller_paypal: user.user_metadata?.paypal_email || null,
-      school_name: isGeneral ? "General" : selectedSchools.map(s => s.school_name).join(", "),
-      school_id: primarySchool?.school_id || null,
-      school_ids: isGeneral ? [] : schoolIds,
-      expires_at: new Date(Date.now() + 60*24*60*60*1000).toISOString(),
-    }]);
-    if (error) return setCreateError(`Failed to create listing: ${error.message}`);
+    let createError2;
+    try {
+      ({ error: createError2 } = await supabase.from("listings").insert([{
+        title, style, size, condition, price: Number(price),
+        description: createForm.description,
+        image: createForm.image,
+        images: createForm.images || [],
+        seller_name: user.user_metadata?.full_name || user.email,
+        seller_email: user.email,
+        seller_paypal: user.user_metadata?.paypal_email || null,
+        school_name: isGeneral ? "General" : selectedSchools.map(s => s.school_name).join(", "),
+        school_id: primarySchool?.school_id || null,
+        school_ids: isGeneral ? [] : schoolIds,
+        expires_at: new Date(Date.now() + 60*24*60*60*1000).toISOString(),
+      }]));
+    } catch (netErr) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        ({ error: createError2 } = await supabase.from("listings").insert([{
+          title, style, size, condition, price: Number(price),
+          description: createForm.description,
+          image: createForm.image,
+          images: createForm.images || [],
+          seller_name: user.user_metadata?.full_name || user.email,
+          seller_email: user.email,
+          seller_paypal: user.user_metadata?.paypal_email || null,
+          school_name: isGeneral ? "General" : selectedSchools.map(s => s.school_name).join(", "),
+          school_id: primarySchool?.school_id || null,
+          school_ids: isGeneral ? [] : schoolIds,
+          expires_at: new Date(Date.now() + 60*24*60*60*1000).toISOString(),
+        }]));
+      } catch (retryErr) {
+        console.error("Create retry failed:", retryErr);
+        return setCreateError("Connection problem — please check your internet and try again.");
+      }
+    }
+    if (createError2) return setCreateError(`Failed to create listing: ${createError2.message}`);
     // Fetch just the new listing to get its ID, then add to local state
     const { data: newListings } = await supabase.from("listings").select("*").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
     if (newListings?.[0]) { setListings(prev => [newListings[0], ...prev]); await checkWishlistMatches(newListings[0]); }
@@ -1483,7 +1506,20 @@ export default function TutuTrade() {
       school_name: isGeneral ? "General" : selectedSchools.map(s => s.name).join(", "),
       ...(editForm.expires_at ? { expires_at: new Date(editForm.expires_at).toISOString(), expired: false, expiry_warned: false } : {}),
     };
-    const { error } = await supabase.from("listings").update(updates).eq("id", selectedListing.id);
+    // Attempt update with one automatic retry on network failure
+    let error;
+    try {
+      ({ error } = await supabase.from("listings").update(updates).eq("id", selectedListing.id));
+    } catch (netErr) {
+      // Network error (e.g. "TypeError: Failed to fetch") — wait 2s and retry once
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        ({ error } = await supabase.from("listings").update(updates).eq("id", selectedListing.id));
+      } catch (retryErr) {
+        console.error("Update retry failed:", retryErr);
+        return setEditError("Connection problem — please check your internet and try again.");
+      }
+    }
     if (error) {
       console.error("Update error:", error);
       return setEditError(`Failed to update: ${error.message}`);
