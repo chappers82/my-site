@@ -963,17 +963,29 @@ export default function TutuTrade() {
   }, [filters.search]);
 
   const loadListings = async () => {
-    const { data } = await supabase.from("listings").select("*").order("created_at",{ascending:false}).limit(500);
+    // Exclude `images` (array of base64 photos) — fetched on-demand per listing to keep this payload small
+    const { data } = await supabase.from("listings")
+      .select("id,title,style,size,condition,price,image,school_id,school_ids,school_name,seller_email,seller_name,seller_paypal,sold,sold_at,created_at,expires_at,expired,expiry_warned,description,item_type")
+      .order("created_at",{ascending:false}).limit(500);
     if (data) {
       setListings(data);
       if (pendingListingId.current) {
         const found = data.find(l => l.id === pendingListingId.current);
-        if (found) { setSelectedListing(found); setModal("detail"); loadComments(found.id); pendingListingId.current = null; }
+        if (found) { setSelectedListing(found); setModal("detail"); loadComments(found.id); loadListingImages(found.id); pendingListingId.current = null; }
       }
       if (pendingSchoolId.current) {
         setFilters(f => ({ ...f, school: pendingSchoolId.current }));
         pendingSchoolId.current = null;
       }
+    }
+  };
+  // Lazy-load the images array for a single listing (kept out of bulk fetch to reduce payload)
+  const loadListingImages = async (listingId) => {
+    const { data } = await supabase.from("listings").select("images").eq("id", listingId).single();
+    if (data) {
+      const imgs = data.images || [];
+      setListings(prev => prev.map(l => l.id === listingId ? { ...l, images: imgs } : l));
+      setSelectedListing(prev => prev?.id === listingId ? { ...prev, images: imgs } : prev);
     }
   };
   const loadAds = async () => { const { data } = await supabase.from("ads").select("*").order("sort_order").order("created_at",{ascending:false}); if (data) setAds(data); };
@@ -1361,8 +1373,8 @@ export default function TutuTrade() {
       }
     }
     if (createError2) return setCreateError(`Failed to create listing: ${createError2.message}`);
-    // Fetch just the new listing to get its ID, then add to local state
-    const { data: newListings } = await supabase.from("listings").select("*").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
+    // Fetch just the new listing to get its ID, then add to local state (omit images — same as loadListings)
+    const { data: newListings } = await supabase.from("listings").select("id,title,style,size,condition,price,image,school_id,school_ids,school_name,seller_email,seller_name,seller_paypal,sold,sold_at,created_at,expires_at,expired,expiry_warned,description,item_type").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
     if (newListings?.[0]) { setListings(prev => [newListings[0], ...prev]); await checkWishlistMatches(newListings[0]); }
     setCreateForm({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
     closeModal(); setSuccess("Your listing is now live!");
@@ -1469,16 +1481,24 @@ export default function TutuTrade() {
   };
 
   // ── EDIT LISTING ──
-  const openEditListing = (listing) => {
+  const openEditListing = async (listing) => {
+    // Ensure images are loaded before populating the edit form
+    let full = listing;
+    if (full.images === undefined) {
+      const { data } = await supabase.from("listings").select("images").eq("id", listing.id).single();
+      full = { ...listing, images: data?.images || [] };
+      setListings(prev => prev.map(l => l.id === listing.id ? full : l));
+      setSelectedListing(prev => prev?.id === listing.id ? full : prev);
+    }
     setEditForm({
-      title: listing.title, style: listing.style, size: listing.size,
-      itemType: listing.item_type || "Clothing",
-      condition: listing.condition, price: listing.price,
-      description: listing.description || "",
-      image: listing.image || null,
-      images: listing.images || [],
-      schoolIds: listing.school_ids?.length ? listing.school_ids : (listing.school_id ? [listing.school_id] : []),
-      expires_at: listing.expires_at ? new Date(listing.expires_at).toISOString().slice(0,10) : "",
+      title: full.title, style: full.style, size: full.size,
+      itemType: full.item_type || "Clothing",
+      condition: full.condition, price: full.price,
+      description: full.description || "",
+      image: full.image || null,
+      images: full.images || [],
+      schoolIds: full.school_ids?.length ? full.school_ids : (full.school_id ? [full.school_id] : []),
+      expires_at: full.expires_at ? new Date(full.expires_at).toISOString().slice(0,10) : "",
     });
     setEditError("");
     setModal("editListing");
@@ -2159,6 +2179,8 @@ export default function TutuTrade() {
     setAuthPromptFor(null);
     loadComments(listing.id);
     setCommentText("");
+    // Lazy-load images if not already fetched for this listing
+    if (listing.images === undefined) loadListingImages(listing.id);
     trackEvent("listing_view", { listing_id: listing.id, title: listing.title, style: listing.style, price: listing.price });
   };
 
