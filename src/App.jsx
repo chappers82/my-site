@@ -964,13 +964,16 @@ export default function TutuTrade() {
   }, [filters.search]);
 
   const loadListings = async () => {
-    // Exclude image + images (base64 columns) — fetched on-demand when a listing is opened
-    // This keeps the bulk fetch to metadata only, making initial load fast regardless of how many photos exist
+    // SELECT * so we never break if columns are added/removed.
+    // Strip image + images from each row after fetch — those are large base64 strings
+    // fetched on-demand per listing when a detail or edit modal is opened.
     const { data } = await supabase.from("listings")
-      .select("id,title,style,size,condition,price,school_id,school_ids,school_name,seller_email,seller_name,seller_paypal,sold,sold_at,created_at,expires_at,expired,expiry_warned,description,item_type")
+      .select("*")
       .order("created_at",{ascending:false}).limit(500);
     if (data) {
-      setListings(data);
+      // eslint-disable-next-line no-unused-vars
+      const stripped = data.map(({ image: _i, images: _is, ...rest }) => rest);
+      setListings(stripped);
       if (pendingListingId.current) {
         const found = data.find(l => l.id === pendingListingId.current);
         if (found) { setSelectedListing(found); setModal("detail"); loadComments(found.id); loadListingImages(found.id); pendingListingId.current = null; }
@@ -1390,9 +1393,9 @@ export default function TutuTrade() {
     }
     setSavingListing(false);
     if (createError2) return setCreateError(`Failed to create listing: ${createError2.message}`);
-    // Fetch just the new listing to get its ID — omit image/images to match loadListings payload
-    const { data: newListings } = await supabase.from("listings").select("id,title,style,size,condition,price,school_id,school_ids,school_name,seller_email,seller_name,seller_paypal,sold,sold_at,created_at,expires_at,expired,expiry_warned,description,item_type").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
-    if (newListings?.[0]) { setListings(prev => [newListings[0], ...prev]); await checkWishlistMatches(newListings[0]); }
+    // Fetch the new listing by ID — SELECT * then strip images to match loadListings shape
+    const { data: newListings } = await supabase.from("listings").select("*").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
+    if (newListings?.[0]) { const { image: _i, images: _is, ...newL } = newListings[0]; setListings(prev => [newL, ...prev]); await checkWishlistMatches(newL); }
     setCreateForm({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
     closeModal(); setSuccess("Your listing is now live!");
   };
