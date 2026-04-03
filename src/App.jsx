@@ -832,6 +832,7 @@ export default function TutuTrade() {
   const [authError, setAuthError] = useState("");
   const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
   const [createError, setCreateError] = useState("");
+  const [savingListing, setSavingListing] = useState(false);
   const [editingAd, setEditingAd] = useState(null);
   const [adForm, setAdForm] = useState({ title:"", tagline:"", url:"", slot:"sidebar-top", scope:"global", school_id:null, active:true, image:null, sort_order:0 });
   const [newSchoolForm, setNewSchoolForm] = useState({ name:"", code:"", color:"#c9a96e" });
@@ -1330,6 +1331,26 @@ export default function TutuTrade() {
     setter(f => ({ ...f, images: f.images.filter((_, i) => i !== index) }));
   };
 
+  // Upload a single image to Supabase Storage and return its public URL.
+  // If it's already a URL (not base64), it's returned unchanged — safe to call on existing listings.
+  const uploadImageToStorage = async (dataUrlOrUrl) => {
+    if (!dataUrlOrUrl) return null;
+    if (!dataUrlOrUrl.startsWith("data:")) return dataUrlOrUrl; // already a URL
+    try {
+      const res = await fetch(dataUrlOrUrl);
+      const blob = await res.blob();
+      const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : blob.type === "image/gif" ? "gif" : "jpg";
+      const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("listing-images").upload(fileName, blob, { contentType: blob.type, cacheControl: "31536000", upsert: false });
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from("listing-images").getPublicUrl(fileName);
+      return publicUrl;
+    } catch (err) {
+      console.warn("Storage upload failed, keeping existing image:", err.message);
+      return dataUrlOrUrl; // fallback: keep base64 if Storage unavailable
+    }
+  };
+
   const handleCreate = async () => {
     setCreateError("");
     const { title, style, size, condition, price, schoolIds } = createForm;
@@ -1338,42 +1359,36 @@ export default function TutuTrade() {
     const isGeneral = !schoolIds || schoolIds.length === 0;
     const selectedSchools = isGeneral ? [] : userSchools.filter(s => schoolIds.includes(s.school_id));
     const primarySchool = selectedSchools[0] || null;
+    // Upload any base64 images to Supabase Storage before saving
+    setSavingListing(true);
+    const rawImages = createForm.images?.length ? createForm.images : (createForm.image ? [createForm.image] : []);
+    const uploadedImages = await Promise.all(rawImages.map(img => uploadImageToStorage(img)));
+    const insertPayload = {
+      title, style, size, condition, price: Number(price),
+      description: createForm.description,
+      image: uploadedImages[0] || null,
+      images: uploadedImages,
+      seller_name: user.user_metadata?.full_name || user.email,
+      seller_email: user.email,
+      seller_paypal: user.user_metadata?.paypal_email || null,
+      school_name: isGeneral ? "General" : selectedSchools.map(s => s.school_name).join(", "),
+      school_id: primarySchool?.school_id || null,
+      school_ids: isGeneral ? [] : schoolIds,
+      expires_at: new Date(Date.now() + 60*24*60*60*1000).toISOString(),
+    };
     let createError2;
     try {
-      ({ error: createError2 } = await supabase.from("listings").insert([{
-        title, style, size, condition, price: Number(price),
-        description: createForm.description,
-        image: createForm.image,
-        images: createForm.images || [],
-        seller_name: user.user_metadata?.full_name || user.email,
-        seller_email: user.email,
-        seller_paypal: user.user_metadata?.paypal_email || null,
-        school_name: isGeneral ? "General" : selectedSchools.map(s => s.school_name).join(", "),
-        school_id: primarySchool?.school_id || null,
-        school_ids: isGeneral ? [] : schoolIds,
-        expires_at: new Date(Date.now() + 60*24*60*60*1000).toISOString(),
-      }]));
+      ({ error: createError2 } = await supabase.from("listings").insert([insertPayload]));
     } catch (netErr) {
       await new Promise(r => setTimeout(r, 2000));
       try {
-        ({ error: createError2 } = await supabase.from("listings").insert([{
-          title, style, size, condition, price: Number(price),
-          description: createForm.description,
-          image: createForm.image,
-          images: createForm.images || [],
-          seller_name: user.user_metadata?.full_name || user.email,
-          seller_email: user.email,
-          seller_paypal: user.user_metadata?.paypal_email || null,
-          school_name: isGeneral ? "General" : selectedSchools.map(s => s.school_name).join(", "),
-          school_id: primarySchool?.school_id || null,
-          school_ids: isGeneral ? [] : schoolIds,
-          expires_at: new Date(Date.now() + 60*24*60*60*1000).toISOString(),
-        }]));
+        ({ error: createError2 } = await supabase.from("listings").insert([insertPayload]));
       } catch (retryErr) {
-        console.error("Create retry failed:", retryErr);
+        setSavingListing(false);
         return setCreateError("Connection problem — please check your internet and try again.");
       }
     }
+    setSavingListing(false);
     if (createError2) return setCreateError(`Failed to create listing: ${createError2.message}`);
     // Fetch just the new listing to get its ID — omit image/images to match loadListings payload
     const { data: newListings } = await supabase.from("listings").select("id,title,style,size,condition,price,school_id,school_ids,school_name,seller_email,seller_name,seller_paypal,sold,sold_at,created_at,expires_at,expired,expiry_warned,description,item_type").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
@@ -1517,12 +1532,16 @@ export default function TutuTrade() {
     const isGeneral = editSchoolIds.length === 0;
     const selectedSchools = isGeneral ? [] : schools.filter(s => editSchoolIds.includes(s.id));
     const primarySchool = selectedSchools[0] || null;
+    // Upload any base64 images to Supabase Storage before saving
+    setSavingListing(true);
+    const rawEditImages = editForm.images?.length ? editForm.images : (editForm.image ? [editForm.image] : []);
+    const uploadedEditImages = await Promise.all(rawEditImages.map(img => uploadImageToStorage(img)));
     const updates = {
       title, style, size, condition,
       price: newPrice,
       description: editForm.description,
-      image: editForm.images?.[0] || editForm.image || null,
-      images: editForm.images || [],
+      image: uploadedEditImages[0] || null,
+      images: uploadedEditImages,
       school_ids: editSchoolIds,
       school_id: primarySchool?.id || null,
       school_name: isGeneral ? "General" : selectedSchools.map(s => s.name).join(", "),
@@ -1538,12 +1557,12 @@ export default function TutuTrade() {
       try {
         ({ error } = await supabase.from("listings").update(updates).eq("id", selectedListing.id));
       } catch (retryErr) {
-        console.error("Update retry failed:", retryErr);
+        setSavingListing(false);
         return setEditError("Connection problem — please check your internet and try again.");
       }
     }
+    setSavingListing(false);
     if (error) {
-      console.error("Update error:", error);
       return setEditError(`Failed to update: ${error.message}`);
     }
     // Price drop — notify favouriters
@@ -4305,7 +4324,7 @@ export default function TutuTrade() {
                   </div>
                 )}
               </div>
-              <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={handleCreate}>Publish listing</button>
+              <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={handleCreate} disabled={savingListing}>{savingListing ? "⏳ Uploading photos…" : "Publish listing"}</button>
             </div>
           </div>
         </div>
@@ -4622,7 +4641,7 @@ export default function TutuTrade() {
                   <div className="form-hint">Leave blank to keep the current expiry date unchanged.</div>
                 </div>
               )}
-              <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={handleUpdateListing}>Save changes</button>
+              <button className="btn btn-primary" style={{width:"100%",padding:".72rem"}} onClick={handleUpdateListing} disabled={savingListing}>{savingListing ? "⏳ Uploading photos…" : "Save changes"}</button>
             </div>
           </div>
         </div>
