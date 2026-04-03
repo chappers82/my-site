@@ -833,6 +833,7 @@ export default function TutuTrade() {
   const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
   const [createError, setCreateError] = useState("");
   const [savingListing, setSavingListing] = useState(false);
+  const [listingsError, setListingsError] = useState(null);
   const [editingAd, setEditingAd] = useState(null);
   const [adForm, setAdForm] = useState({ title:"", tagline:"", url:"", slot:"sidebar-top", scope:"global", school_id:null, active:true, image:null, sort_order:0 });
   const [newSchoolForm, setNewSchoolForm] = useState({ name:"", code:"", color:"#c9a96e" });
@@ -964,13 +965,12 @@ export default function TutuTrade() {
   }, [filters.search]);
 
   const loadListings = async () => {
-    // SELECT * so we never break if columns are added/removed.
-    // Strip image + images from each row after fetch — those are large base64 strings
-    // fetched on-demand per listing when a detail or edit modal is opened.
-    const { data } = await supabase.from("listings")
+    const { data, error } = await supabase.from("listings")
       .select("*")
       .order("created_at",{ascending:false}).limit(500);
+    if (error) { console.error("loadListings error:", error); setListingsError(error.message); return; }
     if (data) {
+      setListingsError(null);
       // eslint-disable-next-line no-unused-vars
       const stripped = data.map(({ image: _i, images: _is, ...rest }) => rest);
       setListings(stripped);
@@ -3374,6 +3374,7 @@ export default function TutuTrade() {
         ) : !user ? (
           /* ── LANDING PAGE for logged-out users ── */
           <div className="landing">
+            {listingsError && <div style={{background:"rgba(224,112,112,.15)",border:"1px solid #e07070",borderRadius:8,padding:"1rem",marginBottom:"1rem",color:"#e07070",fontSize:".85rem"}}>⚠ Could not load listings: <strong>{listingsError}</strong></div>}
             <div className="hero-eyebrow">✦ TutuTrade ✦</div>
             <h1 className="hero-title">Buy & sell <em>beautiful</em><br/>dancewear</h1>
             <p className="hero-sub" style={{fontWeight:500}}>Pre-loved costumes, shoes & accessories — traded between parents at your dance school.</p>
@@ -3635,6 +3636,8 @@ export default function TutuTrade() {
                 <input className="filter-input" placeholder="Max price £" style={{minWidth:90,maxWidth:110}} value={filters.maxPrice} onChange={e => setFilters(f=>({...f,maxPrice:e.target.value}))}/>
               </div>
             )}
+
+            {listingsError && <div style={{background:"rgba(224,112,112,.15)",border:"1px solid #e07070",borderRadius:8,padding:"1rem",marginBottom:"1rem",color:"#e07070",fontSize:".85rem"}}>⚠ Could not load listings: <strong>{listingsError}</strong></div>}
 
             {(view === "browse" || view === "mylistings") && (<>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.1rem",flexWrap:"wrap",gap:".5rem"}}>
