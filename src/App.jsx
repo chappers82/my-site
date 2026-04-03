@@ -898,15 +898,21 @@ export default function TutuTrade() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadConversations(session.user.email); loadOffers(); loadMySchoolAdminRole(session.user.email); }
+      if (session?.user) {
+        setIsAdmin(session.user.email === ADMIN_EMAIL);
+        Promise.all([loadUserSchools(session.user.email), loadNotifPrefs(session.user.email), loadFavourites(session.user.email), loadConversations(session.user.email), loadOffers(), loadMySchoolAdminRole(session.user.email)]);
+      }
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) { setIsAdmin(session.user.email === ADMIN_EMAIL); loadUserSchools(session.user.email); loadNotifPrefs(session.user.email); loadFavourites(session.user.email); loadConversations(session.user.email); loadOffers(); loadMySchoolAdminRole(session.user.email); }
+      if (session?.user) {
+        setIsAdmin(session.user.email === ADMIN_EMAIL);
+        Promise.all([loadUserSchools(session.user.email), loadNotifPrefs(session.user.email), loadFavourites(session.user.email), loadConversations(session.user.email), loadOffers(), loadMySchoolAdminRole(session.user.email)]);
+      }
       else { setUserSchools([]); setIsAdmin(false); setNotifPrefs(DEFAULT_NOTIF_PREFS); setFavourites([]); setConversations([]); }
     });
-    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadBoardPosts(); loadBoardReplies(); loadCommentCounts(); loadWantedPosts(); loadFairyName(); loadRatings(); loadNudges();
+    loadListings(); loadAds(); loadSchools(); loadCommission(); loadEvents(); loadDropdowns(); loadCommentCounts(); loadWantedPosts(); loadFairyName(); loadRatings(); loadNudges();
     const ticker = setInterval(() => setTick(t => t + 1), 1000);
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
   }, []);
@@ -950,7 +956,7 @@ export default function TutuTrade() {
   }, [filters.search]);
 
   const loadListings = async () => {
-    const { data } = await supabase.from("listings").select("*").order("created_at",{ascending:false});
+    const { data } = await supabase.from("listings").select("*").order("created_at",{ascending:false}).limit(500);
     if (data) {
       setListings(data);
       if (pendingListingId.current) {
@@ -976,14 +982,14 @@ export default function TutuTrade() {
   };
   const loadBoardPosts = async () => { const { data } = await supabase.from("board_posts").select("*").order("created_at",{ascending:false}); if (data) setBoardPosts(data); };
   const loadBoardReplies = async () => { const { data } = await supabase.from("board_replies").select("*").order("created_at"); if (data) setBoardReplies(data); };
-  const loadWantedPosts = async () => { const { data } = await supabase.from("wanted_posts").select("*").order("created_at",{ascending:false}); if (data) setWantedPosts(data); };
+  const loadWantedPosts = async () => { const { data } = await supabase.from("wanted_posts").select("*").order("created_at",{ascending:false}).limit(200); if (data) setWantedPosts(data); };
   const loadCommission = async () => { const { data } = await supabase.from("settings").select("value").eq("key","commission_pct").single(); if (data) setCommissionPct(parseFloat(data.value)); };
   const loadFairyName = async () => { const { data } = await supabase.from("settings").select("value").eq("key","fairy_name").single(); if (data) setFairyName(data.value); };
   const loadFavourites = async (email) => { const e = email || user?.email; if (!e) return; const { data } = await supabase.from("favourites").select("*").eq("user_email", e); if (data) setFavourites(data); };
-  const loadRatings = async () => { const { data } = await supabase.from("seller_ratings").select("*"); if (data) setRatings(data); };
+  const loadRatings = async () => { const { data } = await supabase.from("seller_ratings").select("*").limit(500); if (data) setRatings(data); };
   const loadConversations = async (email) => {
     const e = email || user?.email; if (!e) return;
-    const { data } = await supabase.from("conversations").select("*").or(`buyer_email.eq.${e},seller_email.eq.${e}`).order("created_at", { ascending: false });
+    const { data } = await supabase.from("conversations").select("*").or(`buyer_email.eq.${e},seller_email.eq.${e}`).order("created_at", { ascending: false }).limit(100);
     if (data) { setConversations(data); }
   };
   const loadMessages = async (convId) => {
@@ -1099,8 +1105,8 @@ export default function TutuTrade() {
       }
     }
   };
-  const loadAllUserSchools = async () => { const { data } = await supabase.from("user_schools").select("*"); if (data) setAllUserSchools(data); };
-  const loadAllUsers = async () => { const { data } = await supabase.from("user_profiles").select("*"); if (data) setAllUsers(data); };
+  const loadAllUserSchools = async () => { const { data } = await supabase.from("user_schools").select("*").limit(1000); if (data) setAllUserSchools(data); };
+  const loadAllUsers = async () => { const { data } = await supabase.from("user_profiles").select("*").limit(500); if (data) setAllUsers(data); };
 
   const loadMySchoolAdminRole = async (email) => {
     const e = email || user?.email;
