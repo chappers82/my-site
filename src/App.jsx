@@ -1599,11 +1599,8 @@ export default function TutuTrade() {
     let uploadedEditImages = [];
     try {
       const rawEditImages = editForm.images?.length ? editForm.images : (editForm.image ? [editForm.image] : []);
-      alert(`DEBUG: ${rawEditImages.length} image(s) queued. First starts with: ${rawEditImages[0]?.slice(0,40) || "none"}`);
       uploadedEditImages = (await Promise.all(rawEditImages.map(img => uploadImageToStorage(img)))).filter(Boolean);
-      alert(`DEBUG: Upload done. ${uploadedEditImages.length} succeeded. First URL: ${uploadedEditImages[0]?.slice(0,60) || "none"}`);
     } catch (uploadErr) {
-      alert(`DEBUG ERROR: ${uploadErr.message}`);
       setSavingListing(false);
       return setEditError(uploadErr.message);
     }
