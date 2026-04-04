@@ -267,7 +267,17 @@ function getCSS(P) { return `
   .image-gallery{display:flex;gap:.5rem;overflow-x:auto;margin-bottom:1.1rem;padding-bottom:.25rem}
   .image-gallery img{height:180px;width:auto;min-width:180px;object-fit:cover;border-radius:8px;cursor:zoom-in;flex-shrink:0;transition:opacity .2s}
   .image-gallery img:hover{opacity:.85}
-  .image-gallery-single{width:100%;height:210px;object-fit:cover;border-radius:10px;cursor:zoom-in}
+  .image-gallery-single{width:100%;height:240px;object-fit:cover;border-radius:10px;cursor:zoom-in}
+  .img-carousel{position:relative;width:100%;border-radius:10px;overflow:hidden;margin-bottom:1.1rem;background:#1a1228;user-select:none}
+  .img-carousel-track{display:flex;transition:transform .28s cubic-bezier(.4,0,.2,1);will-change:transform}
+  .img-carousel-track img{width:100%;flex-shrink:0;height:240px;object-fit:cover;cursor:zoom-in;display:block}
+  .img-carousel-btn{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.5);border:none;color:white;font-size:1.5rem;width:38px;height:38px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;transition:background .18s;line-height:1;padding:0}
+  .img-carousel-btn:hover{background:rgba(0,0,0,.78)}
+  .img-carousel-prev{left:.55rem}
+  .img-carousel-next{right:.55rem}
+  .img-carousel-dots{position:absolute;bottom:.6rem;left:50%;transform:translateX(-50%);display:flex;gap:.38rem;z-index:2}
+  .img-carousel-dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.38);cursor:pointer;transition:background .18s;border:none;padding:0}
+  .img-carousel-dot.active{background:white}
   .multi-upload-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-top:.5rem}
   .multi-upload-thumb{position:relative;aspect-ratio:1;border-radius:7px;overflow:hidden}
   .multi-upload-thumb img{width:100%;height:100%;object-fit:cover}
@@ -828,6 +838,8 @@ export default function TutuTrade() {
   const [filters, setFilters] = useState({ search:"", style:"", size:"", condition:"", maxPrice:"", school:"" });
   const [showSold, setShowSold] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const carouselTouchX = useRef(null);
   const [authForm, setAuthForm] = useState({ name:"", email:"", password:"", schoolCode:"" });
   const [authError, setAuthError] = useState("");
   const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
@@ -965,10 +977,10 @@ export default function TutuTrade() {
   }, [filters.search]);
 
   const loadListings = async () => {
-    // Explicit columns — excludes `image` and `images` (large base64 blobs that cause statement timeouts).
-    // `item_type` intentionally omitted — column does not exist in this DB schema.
+    // Explicit columns — includes `image` (thumbnail URL, now safe since blobs were cleared + new uploads are compressed).
+    // Excludes `images` array (lazy-loaded on detail open). `item_type` omitted — column does not exist in this DB schema.
     const { data, error } = await supabase.from("listings")
-      .select("id,title,style,size,condition,price,description,seller_name,seller_email,seller_paypal,school_name,school_id,school_ids,expires_at,expired,expiry_warned,sold,sold_at,created_at,renewed_at")
+      .select("id,title,style,size,condition,price,description,seller_name,seller_email,seller_paypal,school_name,school_id,school_ids,expires_at,expired,expiry_warned,sold,sold_at,created_at,renewed_at,image")
       .order("created_at",{ascending:false}).limit(500);
     if (error) { console.error("loadListings error:", error); setListingsError(error.message); return; }
     if (data) {
@@ -1293,23 +1305,48 @@ export default function TutuTrade() {
     setSuccess("Your account has been deleted.");
   };
 
+  // Compress/resize an image dataUrl to max 1200px JPEG at 82% quality using canvas.
+  // Returns a new dataUrl. Falls back to original if anything goes wrong.
+  const compressImage = (dataUrl, maxPx = 1200, quality = 0.82) =>
+    new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxPx || height > maxPx) {
+          if (width > height) { height = Math.round(height * maxPx / width); width = maxPx; }
+          else { width = Math.round(width * maxPx / height); height = maxPx; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+
   const handleImageUpload = (e, setter) => {
     const file = e.target.files[0]; if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { alert("Image must be under 5MB. Please choose a smaller file or reduce the photo size."); e.target.value = ""; return; }
     const reader = new FileReader();
-    reader.onload = ev => setter(f => ({ ...f, image: ev.target.result }));
+    reader.onload = async ev => {
+      const compressed = await compressImage(ev.target.result);
+      setter(f => ({ ...f, image: compressed }));
+    };
     reader.readAsDataURL(file);
   };
 
   const handleMultiImageUpload = (e) => {
-    const files = Array.from(e.target.files).slice(0, 5 - (createForm.images?.length || 0)).filter(f => { if (f.size > 5*1024*1024) { alert(`"${f.name}" is over 5MB — please use a smaller photo.`); return false; } return true; });
+    const files = Array.from(e.target.files).slice(0, 5 - (createForm.images?.length || 0));
     files.forEach(file => {
       const reader = new FileReader();
-      reader.onload = ev => setCreateForm(f => ({
-        ...f,
-        images: [...(f.images || []).slice(0, 4), ev.target.result],
-        image: f.image || ev.target.result, // first image is also the main image
-      }));
+      reader.onload = async ev => {
+        const compressed = await compressImage(ev.target.result);
+        setCreateForm(f => ({
+          ...f,
+          images: [...(f.images || []).slice(0, 4), compressed],
+          image: f.image || compressed,
+        }));
+      };
       reader.readAsDataURL(file);
     });
   };
@@ -1325,7 +1362,10 @@ export default function TutuTrade() {
     const files = Array.from(e.target.files).slice(0, 3);
     files.forEach(file => {
       const reader = new FileReader();
-      reader.onload = ev => setter(f => ({ ...f, images: [...(f.images || []).slice(0, 2), ev.target.result] }));
+      reader.onload = async ev => {
+        const compressed = await compressImage(ev.target.result);
+        setter(f => ({ ...f, images: [...(f.images || []).slice(0, 2), compressed] }));
+      };
       reader.readAsDataURL(file);
     });
   };
@@ -1334,23 +1374,32 @@ export default function TutuTrade() {
     setter(f => ({ ...f, images: f.images.filter((_, i) => i !== index) }));
   };
 
+  // Convert a base64 data URL to a Blob — works reliably on all browsers including mobile Safari.
+  const dataUrlToBlob = (dataUrl) => {
+    const [header, b64] = dataUrl.split(",");
+    const mime = header.match(/:(.*?);/)[1];
+    const binary = atob(b64);
+    const arr = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  };
+
   // Upload a single image to Supabase Storage and return its public URL.
   // If it's already a URL (not base64), it's returned unchanged — safe to call on existing listings.
   const uploadImageToStorage = async (dataUrlOrUrl) => {
     if (!dataUrlOrUrl) return null;
-    if (!dataUrlOrUrl.startsWith("data:")) return dataUrlOrUrl; // already a URL
+    if (!dataUrlOrUrl.startsWith("data:")) return dataUrlOrUrl; // already a Storage URL
     try {
-      const res = await fetch(dataUrlOrUrl);
-      const blob = await res.blob();
-      const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : blob.type === "image/gif" ? "gif" : "jpg";
+      const blob = dataUrlToBlob(dataUrlOrUrl);
+      const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
       const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { error: upErr } = await supabase.storage.from("listing-images").upload(fileName, blob, { contentType: blob.type, cacheControl: "31536000", upsert: false });
       if (upErr) throw upErr;
       const { data: { publicUrl } } = supabase.storage.from("listing-images").getPublicUrl(fileName);
       return publicUrl;
     } catch (err) {
-      console.warn("Storage upload failed, keeping existing image:", err.message);
-      return dataUrlOrUrl; // fallback: keep base64 if Storage unavailable
+      console.error("⚠️ Storage upload failed:", err.message, err);
+      throw new Error(`Photo upload failed: ${err.message}`);
     }
   };
 
@@ -1364,8 +1413,14 @@ export default function TutuTrade() {
     const primarySchool = selectedSchools[0] || null;
     // Upload any base64 images to Supabase Storage before saving
     setSavingListing(true);
-    const rawImages = createForm.images?.length ? createForm.images : (createForm.image ? [createForm.image] : []);
-    const uploadedImages = await Promise.all(rawImages.map(img => uploadImageToStorage(img)));
+    let uploadedImages = [];
+    try {
+      const rawImages = createForm.images?.length ? createForm.images : (createForm.image ? [createForm.image] : []);
+      uploadedImages = (await Promise.all(rawImages.map(img => uploadImageToStorage(img)))).filter(Boolean);
+    } catch (uploadErr) {
+      setSavingListing(false);
+      return setCreateError(uploadErr.message);
+    }
     const insertPayload = {
       title, style, size, condition, price: Number(price),
       description: createForm.description,
@@ -1393,13 +1448,18 @@ export default function TutuTrade() {
     }
     setSavingListing(false);
     if (createError2) return setCreateError(`Failed to create listing: ${createError2.message}`);
-    const { data: newListings } = await supabase.from("listings").select("id,title,style,size,condition,price,description,seller_name,seller_email,seller_paypal,school_name,school_id,school_ids,expires_at,expired,expiry_warned,sold,sold_at,created_at,renewed_at").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
+    const { data: newListings } = await supabase.from("listings").select("id,title,style,size,condition,price,description,seller_name,seller_email,seller_paypal,school_name,school_id,school_ids,expires_at,expired,expiry_warned,sold,sold_at,created_at,renewed_at,image").eq("seller_email", user.email).order("created_at", { ascending: false }).limit(1);
     if (newListings?.[0]) { setListings(prev => [newListings[0], ...prev]); await checkWishlistMatches(newListings[0]); }
     setCreateForm({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
     closeModal(); setSuccess("Your listing is now live!");
   };
 
-  const handleDelete = async (id) => { await supabase.from("listings").delete().eq("id", id); setListings(prev => prev.filter(l => l.id !== id)); closeModal(); };
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to remove this listing? This cannot be undone.")) return;
+    await supabase.from("listings").delete().eq("id", id);
+    setListings(prev => prev.filter(l => l.id !== id));
+    closeModal();
+  };
   const handleMarkSold = async (id) => {
     await supabase.from("listings").update({ sold: true, sold_at: new Date().toISOString() }).eq("id", id);
     const listing = listings.find(l => l.id === id);
@@ -1536,8 +1596,17 @@ export default function TutuTrade() {
     const primarySchool = selectedSchools[0] || null;
     // Upload any base64 images to Supabase Storage before saving
     setSavingListing(true);
-    const rawEditImages = editForm.images?.length ? editForm.images : (editForm.image ? [editForm.image] : []);
-    const uploadedEditImages = await Promise.all(rawEditImages.map(img => uploadImageToStorage(img)));
+    let uploadedEditImages = [];
+    try {
+      const rawEditImages = editForm.images?.length ? editForm.images : (editForm.image ? [editForm.image] : []);
+      alert(`DEBUG: ${rawEditImages.length} image(s) queued. First starts with: ${rawEditImages[0]?.slice(0,40) || "none"}`);
+      uploadedEditImages = (await Promise.all(rawEditImages.map(img => uploadImageToStorage(img)))).filter(Boolean);
+      alert(`DEBUG: Upload done. ${uploadedEditImages.length} succeeded. First URL: ${uploadedEditImages[0]?.slice(0,60) || "none"}`);
+    } catch (uploadErr) {
+      alert(`DEBUG ERROR: ${uploadErr.message}`);
+      setSavingListing(false);
+      return setEditError(uploadErr.message);
+    }
     const updates = {
       title, style, size, condition,
       price: newPrice,
@@ -1596,10 +1665,13 @@ export default function TutuTrade() {
   };
 
   const handleEditMultiImageUpload = (e) => {
-    const files = Array.from(e.target.files).slice(0, 5 - (editForm.images?.length || 0)).filter(f => { if (f.size > 5*1024*1024) { alert(`"${f.name}" is over 5MB — please use a smaller photo.`); return false; } return true; });
+    const files = Array.from(e.target.files).slice(0, 5 - (editForm.images?.length || 0));
     files.forEach(file => {
       const reader = new FileReader();
-      reader.onload = ev => setEditForm(f => ({ ...f, images: [...(f.images||[]), ev.target.result].slice(0,5) }));
+      reader.onload = async ev => {
+        const compressed = await compressImage(ev.target.result);
+        setEditForm(f => ({ ...f, images: [...(f.images||[]), compressed].slice(0,5) }));
+      };
       reader.readAsDataURL(file);
     });
   };
@@ -2208,6 +2280,7 @@ export default function TutuTrade() {
     setSelectedListing(listing);
     setModal("detail");
     setAuthPromptFor(null);
+    setGalleryIndex(0);
     loadComments(listing.id);
     setCommentText("");
     // Lazy-load images if not already fetched for this listing
@@ -4346,18 +4419,42 @@ export default function TutuTrade() {
             <div className="modal" onClick={e=>e.stopPropagation()} style={{borderTop:`3px solid ${sc}`}}>
               <div className="modal-header"><div className="modal-title">{selectedListing.title}</div><button className="modal-close" onClick={closeModal}>×</button></div>
               <div className="modal-body">
-                {/* Image gallery */}
-                {selectedListing.images && selectedListing.images.length > 1 ? (
-                  <div className="image-gallery">
-                    {selectedListing.images.map((img, i) => (
-                      <img key={i} src={img} alt={`${selectedListing.title} ${i+1}`} onClick={() => setLightboxImage(img)}/>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="detail-image" style={{cursor:(selectedListing.image||selectedListing.images?.[0])?"zoom-in":"default"}} onClick={()=>{const img=selectedListing.image||selectedListing.images?.[0];if(img)setLightboxImage(img);}}>
-                    {(selectedListing.image||selectedListing.images?.[0])?<img src={selectedListing.image||selectedListing.images?.[0]} alt={selectedListing.title} className="image-gallery-single"/>:styleEmoji[selectedListing.style]||"👗"}
-                  </div>
-                )}
+                {/* Image carousel */}
+                {(() => {
+                  const imgs = (selectedListing.images?.length > 0 ? selectedListing.images : (selectedListing.image ? [selectedListing.image] : []));
+                  if (imgs.length === 0) return (
+                    <div className="detail-image" style={{cursor:"default",fontSize:"3.5rem",display:"flex",alignItems:"center",justifyContent:"center",height:180,background:"linear-gradient(135deg,#1e1729,#2a1f3d)",borderRadius:10,marginBottom:"1.1rem"}}>
+                      {styleEmoji[selectedListing.style]||"👗"}
+                    </div>
+                  );
+                  if (imgs.length === 1) return (
+                    <div style={{marginBottom:"1.1rem"}} onClick={()=>setLightboxImage(imgs[0])}>
+                      <img src={imgs[0]} alt={selectedListing.title} className="image-gallery-single"/>
+                    </div>
+                  );
+                  const clampedIdx = Math.min(galleryIndex, imgs.length - 1);
+                  return (
+                    <div className="img-carousel"
+                      onTouchStart={e=>{ carouselTouchX.current = e.touches[0].clientX; }}
+                      onTouchEnd={e=>{
+                        const dx = (carouselTouchX.current ?? 0) - e.changedTouches[0].clientX;
+                        if (dx > 45 && clampedIdx < imgs.length - 1) setGalleryIndex(clampedIdx + 1);
+                        else if (dx < -45 && clampedIdx > 0) setGalleryIndex(clampedIdx - 1);
+                      }}
+                    >
+                      <div className="img-carousel-track" style={{transform:`translateX(-${clampedIdx * 100}%)`}}>
+                        {imgs.map((img, i) => (
+                          <img key={i} src={img} alt={`${selectedListing.title} ${i+1}`} onClick={()=>setLightboxImage(img)}/>
+                        ))}
+                      </div>
+                      {clampedIdx > 0 && <button className="img-carousel-btn img-carousel-prev" onClick={()=>setGalleryIndex(clampedIdx-1)}>‹</button>}
+                      {clampedIdx < imgs.length - 1 && <button className="img-carousel-btn img-carousel-next" onClick={()=>setGalleryIndex(clampedIdx+1)}>›</button>}
+                      <div className="img-carousel-dots">
+                        {imgs.map((_,i) => <button key={i} className={`img-carousel-dot${i===clampedIdx?" active":""}`} onClick={()=>setGalleryIndex(i)}/>)}
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="detail-tags">
                   <span className="tag tag-style">{selectedListing.style}</span>
                   <span className="tag tag-size">{selectedListing.size}</span>
