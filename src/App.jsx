@@ -259,8 +259,13 @@ function getCSS(P) { return `
   .sold-badge{padding:.35rem 1rem;background:#e07070;color:white;border-radius:20px;font-size:.72rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
   .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:fadeIn .15s ease}
   .lightbox img{max-width:92vw;max-height:92vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 48px rgba(0,0,0,.6)}
-  .lightbox-close{position:absolute;top:1.25rem;right:1.5rem;background:rgba(255,255,255,.12);border:none;color:white;font-size:1.6rem;cursor:pointer;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background .2s}
+  .lightbox-close{position:absolute;top:1.25rem;right:1.5rem;background:rgba(255,255,255,.12);border:none;color:white;font-size:1.6rem;cursor:pointer;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background .2s;z-index:2}
   .lightbox-close:hover{background:rgba(255,255,255,.22)}
+  .lightbox-nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:white;font-size:2rem;cursor:pointer;width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background .2s;z-index:2;line-height:1;padding:0}
+  .lightbox-nav:hover{background:rgba(255,255,255,.3)}
+  .lightbox-prev{left:1rem}
+  .lightbox-next{right:1rem}
+  .lightbox-dots{position:absolute;bottom:1.25rem;left:50%;transform:translateX(-50%);display:flex;gap:.45rem;z-index:2}
   .show-sold-toggle{display:flex;align-items:center;gap:.5rem;font-size:.75rem;color:${P.muted};cursor:pointer;padding:.4rem .8rem;border:1px solid ${P.border};border-radius:20px;background:transparent;font-family:'Jost',sans-serif;transition:all .2s;white-space:nowrap}
   .show-sold-toggle:hover{border-color:${P.accent};color:${P.accent}}
   .show-sold-toggle.active{border-color:${P.accent};color:${P.accent};background:rgba(201,169,110,.08)}
@@ -837,9 +842,11 @@ export default function TutuTrade() {
   const [success, setSuccess] = useState("");
   const [filters, setFilters] = useState({ search:"", style:"", size:"", condition:"", maxPrice:"", school:"" });
   const [showSold, setShowSold] = useState(false);
-  const [lightboxImage, setLightboxImage] = useState(null);
+  const [lightboxImgs, setLightboxImgs] = useState([]);
+  const [lightboxIdx, setLightboxIdx] = useState(0);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const carouselTouchX = useRef(null);
+  const lightboxTouchX = useRef(null);
   const [authForm, setAuthForm] = useState({ name:"", email:"", password:"", schoolCode:"" });
   const [authError, setAuthError] = useState("");
   const [createForm, setCreateForm] = useState({ title:"", style:"", size:"", itemType:"", condition:"", price:"", description:"", image:null, images:[], schoolIds:[] });
@@ -975,6 +982,18 @@ export default function TutuTrade() {
     }, 1500);
     return () => clearTimeout(searchTrackTimer.current);
   }, [filters.search]);
+
+  // Keyboard navigation for lightbox
+  useEffect(() => {
+    if (!lightboxImgs.length) return;
+    const handler = (e) => {
+      if (e.key === "ArrowRight") setLightboxIdx(i => Math.min(i + 1, lightboxImgs.length - 1));
+      else if (e.key === "ArrowLeft") setLightboxIdx(i => Math.max(i - 1, 0));
+      else if (e.key === "Escape") setLightboxImgs([]);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [lightboxImgs]);
 
   const loadListings = async () => {
     // Explicit columns — includes `image` (thumbnail URL, now safe since blobs were cleared + new uploads are compressed).
@@ -3731,7 +3750,7 @@ export default function TutuTrade() {
                       <div className="card" key={l.id} style={{borderColor:hexToRgba(sc,0.25),opacity:l.sold?0.7:1}} onClick={()=>openListingDetail(l)}>
                         <div className="school-stripe" style={{background:sc}}/>
                         <div className="card-image-wrap">
-                          <div className="card-image" onClick={e=>{if(l.image){e.stopPropagation();setLightboxImage(l.image);}}}>
+                          <div className="card-image" onClick={e=>{if(l.image){e.stopPropagation();setLightboxImgs([l.image]);setLightboxIdx(0);}}}>
                             {l.image ? <img src={l.image} alt={l.title} loading="lazy" decoding="async"/> : styleEmoji[l.style]||"👗"}
                             <span className={`condition-pill condition-${conditionKey[l.condition]||"good"}`}>{l.condition}</span>
                           </div>
@@ -4152,7 +4171,7 @@ export default function TutuTrade() {
                           {post.images?.length > 0 && (
                             <div className="image-gallery" style={{marginTop:".5rem",marginBottom:".25rem"}}>
                               {post.images.map((img,i) => (
-                                <img key={i} src={img} alt="" loading="lazy" decoding="async" style={{height:100,width:"auto",minWidth:100,objectFit:"cover",borderRadius:6,cursor:"zoom-in",flexShrink:0}} onClick={()=>setLightboxImage(img)}/>
+                                <img key={i} src={img} alt="" loading="lazy" decoding="async" style={{height:100,width:"auto",minWidth:100,objectFit:"cover",borderRadius:6,cursor:"zoom-in",flexShrink:0}} onClick={()=>{setLightboxImgs([img]);setLightboxIdx(0);}}/>
                               ))}
                             </div>
                           )}
@@ -4425,7 +4444,7 @@ export default function TutuTrade() {
                     </div>
                   );
                   if (imgs.length === 1) return (
-                    <div style={{marginBottom:"1.1rem"}} onClick={()=>setLightboxImage(imgs[0])}>
+                    <div style={{marginBottom:"1.1rem"}} onClick={()=>{setLightboxImgs(imgs);setLightboxIdx(0);}}>
                       <img src={imgs[0]} alt={selectedListing.title} className="image-gallery-single"/>
                     </div>
                   );
@@ -4441,7 +4460,7 @@ export default function TutuTrade() {
                     >
                       <div className="img-carousel-track" style={{transform:`translateX(-${clampedIdx * 100}%)`}}>
                         {imgs.map((img, i) => (
-                          <img key={i} src={img} alt={`${selectedListing.title} ${i+1}`} onClick={()=>setLightboxImage(img)}/>
+                          <img key={i} src={img} alt={`${selectedListing.title} ${i+1}`} onClick={()=>{setLightboxImgs(imgs);setLightboxIdx(i);}}/>
                         ))}
                       </div>
                       {clampedIdx > 0 && <button className="img-carousel-btn img-carousel-prev" onClick={()=>setGalleryIndex(clampedIdx-1)}>‹</button>}
@@ -4747,10 +4766,25 @@ export default function TutuTrade() {
       )}
 
       {/* LIGHTBOX */}
-      {lightboxImage && (
-        <div className="lightbox" onClick={() => setLightboxImage(null)}>
-          <button className="lightbox-close" onClick={() => setLightboxImage(null)}>×</button>
-          <img src={lightboxImage} alt="Full size" onClick={e => e.stopPropagation()}/>
+      {lightboxImgs.length > 0 && (
+        <div className="lightbox"
+          onClick={() => setLightboxImgs([])}
+          onTouchStart={e => { lightboxTouchX.current = e.touches[0].clientX; }}
+          onTouchEnd={e => {
+            const dx = (lightboxTouchX.current ?? 0) - e.changedTouches[0].clientX;
+            if (dx > 45 && lightboxIdx < lightboxImgs.length - 1) setLightboxIdx(i => i + 1);
+            else if (dx < -45 && lightboxIdx > 0) setLightboxIdx(i => i - 1);
+          }}
+        >
+          <button className="lightbox-close" onClick={() => setLightboxImgs([])}>×</button>
+          <img src={lightboxImgs[lightboxIdx]} alt="Full size" onClick={e => e.stopPropagation()}/>
+          {lightboxImgs.length > 1 && <>
+            {lightboxIdx > 0 && <button className="lightbox-nav lightbox-prev" onClick={e=>{e.stopPropagation();setLightboxIdx(i=>i-1);}}>‹</button>}
+            {lightboxIdx < lightboxImgs.length - 1 && <button className="lightbox-nav lightbox-next" onClick={e=>{e.stopPropagation();setLightboxIdx(i=>i+1);}}>›</button>}
+            <div className="lightbox-dots" onClick={e=>e.stopPropagation()}>
+              {lightboxImgs.map((_,i) => <button key={i} className={`img-carousel-dot${i===lightboxIdx?" active":""}`} onClick={()=>setLightboxIdx(i)}/>)}
+            </div>
+          </>}
         </div>
       )}
 
