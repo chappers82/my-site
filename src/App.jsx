@@ -3643,6 +3643,50 @@ export default function TutuTrade() {
               </div>
             )}
 
+            {/* Upcoming events for user's schools — always visible on browse, no filter needed */}
+            {user && view === "browse" && !activeSchoolFilter && (() => {
+              const upcomingEvents = events.filter(e => {
+                const isMemberSchool = userSchools.some(us => us.school_id === e.school_id);
+                return isMemberSchool && new Date(e.event_date) > new Date();
+              }).sort((a,b) => new Date(a.event_date) - new Date(b.event_date)).slice(0, 5);
+              if (!upcomingEvents.length) return null;
+              return (
+                <div style={{marginBottom:"1.25rem"}}>
+                  <div style={{fontSize:".7rem",textTransform:"uppercase",letterSpacing:".12em",color:P.accent,marginBottom:".65rem",opacity:.85}}>📅 Upcoming Events</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:".6rem"}}>
+                    {upcomingEvents.map(ev => {
+                      const sc = schools.find(s => s.id === ev.school_id)?.color || P.accent;
+                      const cd = getCountdown(ev.event_date);
+                      return (
+                        <div key={ev.id} className="countdown-card" style={{borderLeftColor:sc,background:hexToRgba(sc,0.05)}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:".5rem",marginBottom:cd?".6rem":"0"}}>
+                            <div>
+                              <div className="countdown-card-title" style={{color:sc}}>{ev.title}</div>
+                              <div style={{fontSize:".72rem",color:P.muted}}>{schools.find(s=>s.id===ev.school_id)?.name} · {new Date(ev.event_date).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}</div>
+                              {ev.description && <div className="countdown-card-desc" style={{marginTop:".25rem",marginBottom:0}}>{ev.description}</div>}
+                            </div>
+                          </div>
+                          {cd && (
+                            <div className="countdown-timer">
+                              {[["d","Days"],["h","Hrs"],["m","Mins"],["s","Secs"]].map(([k,label],i) => (
+                                <Fragment key={k}>
+                                  {i > 0 && <span className="countdown-sep">:</span>}
+                                  <div className="countdown-unit" style={{background:hexToRgba(sc,0.12)}}>
+                                    <span className="countdown-num" style={{color:sc}}>{String(cd[k]).padStart(2,"0")}</span>
+                                    <span className="countdown-label">{label}</span>
+                                  </div>
+                                </Fragment>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* School filter banner */}
             {view === "browse" && activeSchoolFilter && (() => {
               const sc = activeSchoolFilter.color || P.accent;
@@ -4497,11 +4541,9 @@ export default function TutuTrade() {
                   </div>
                 </div>
                 {!isOwner && (
-                  <div className="commission-box">
-                    <div className="commission-row"><span className="commission-label">Item price</span><span className="commission-value">£{selectedListing.price}</span></div>
-                    <div className="commission-row"><span className="commission-label">Platform fee ({effectiveCommission}%)</span><span className="commission-value">£{commission}</span></div>
-                    <div className="commission-row total"><span>You pay</span><span>£{selectedListing.price}</span></div>
-                    <div style={{fontSize:".67rem",color:P.muted,marginTop:".35rem"}}>Payment is processed securely via PayPal. The seller will receive their payout within 24 hours of sale.</div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:".6rem 0",borderBottom:`1px solid ${P.border}`,marginBottom:".25rem"}}>
+                    <span style={{fontSize:".82rem",color:P.muted}}>Asking price</span>
+                    <span style={{fontSize:"1.15rem",fontWeight:700,color:P.success}}>£{selectedListing.price}</span>
                   </div>
                 )}
                 {isOwner ? (
@@ -4514,12 +4556,18 @@ export default function TutuTrade() {
                     <button className="btn btn-danger" style={{width:"100%"}} onClick={()=>handleDelete(selectedListing.id)}>Remove listing</button>
                   </div>
                 ) : user ? (
-                  <a href={`https://www.paypal.com/paypalme/tututrade/${selectedListing.price}GBP`} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>
-                    <button className="paypal-btn">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.067 8.478c.492.88.556 2.014.3 3.327-.74 3.806-3.276 5.12-6.514 5.12h-.5a.805.805 0 0 0-.794.68l-.04.22-.63 3.993-.032.17a.804.804 0 0 1-.794.679H7.72a.483.483 0 0 1-.477-.558L7.418 21h1.518l.95-6.02h1.385c4.678 0 7.75-2.203 8.796-6.502zm-2.96-5.09c.762.868.983 1.81.755 3.137-.093.534-.26 1.02-.5 1.46-.838-3.511-3.235-4.7-7.438-4.7H5.964l.947-5.951A.483.483 0 0 1 7.388 1h5.787c3.44 0 5.58 1.03 6.557 3.019l-.625-.631z"/></svg>
-                      Pay £{selectedListing.price} with PayPal
+                  <div style={{display:"flex",flexDirection:"column",gap:".5rem"}}>
+                    <button className="btn btn-primary" style={{width:"100%",padding:".72rem",fontSize:".92rem"}} onClick={()=>startConversation(selectedListing)}>
+                      ✉ Message seller to buy
                     </button>
-                  </a>
+                    {(selectedListing.seller_paypal || selectedListing.seller_email) && (
+                      <div style={{padding:".75rem 1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:8,fontSize:".78rem",color:P.muted,lineHeight:1.5}}>
+                        <strong style={{color:P.text,display:"block",marginBottom:".25rem"}}>How to pay</strong>
+                        Agree the sale with the seller via messages, then send <strong style={{color:P.accent}}>£{selectedListing.price}</strong> to <strong style={{color:P.success}}>{selectedListing.seller_paypal || selectedListing.seller_email}</strong> via PayPal or bank transfer.
+                        The seller will mark the item as sold once payment is received.
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div style={{padding:"1rem",background:P.surface,border:`1px solid ${P.border}`,borderRadius:10,textAlign:"center"}}>
                     <div style={{fontSize:".85rem",color:P.text,marginBottom:".5rem",fontWeight:500}}>Join to purchase this item</div>
