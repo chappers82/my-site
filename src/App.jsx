@@ -839,6 +839,7 @@ export default function TutuTrade() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [authTab, setAuthTab] = useState("login");
   const [authPromptFor, setAuthPromptFor] = useState(null); // "message" | "offer" | null
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [success, setSuccess] = useState("");
   const [filters, setFilters] = useState({ search:"", style:"", size:"", condition:"", maxPrice:"", school:"" });
   const [showSold, setShowSold] = useState(false);
@@ -942,6 +943,14 @@ export default function TutuTrade() {
       setTimeout(() => { loadCommentCounts(); loadRatings(); }, 1600);
     });
     const ticker = setInterval(() => setTick(t => t + 1), 1000);
+    // Handle Stripe return URLs
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("purchase") === "success") {
+      setSuccess("🎉 Payment confirmed! The seller has been notified and will be in touch to arrange collection or postage.");
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (params.get("purchase") === "cancelled") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
     return () => { subscription.unsubscribe(); clearInterval(ticker); };
   }, []);
 
@@ -2053,6 +2062,37 @@ export default function TutuTrade() {
       closeModal();
     }
   };
+  // Stripe Checkout — create a session and redirect the buyer
+  const startCheckout = async (listing) => {
+    if (!user) return;
+    setCheckoutLoading(true);
+    try {
+      const res = await fetch("/.netlify/functions/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId: listing.id,
+          listingTitle: listing.title,
+          price: listing.price,
+          sellerEmail: listing.seller_email,
+          buyerEmail: user.email,
+          commissionPct,
+        }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setSuccess("");
+        alert("Could not start checkout: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      alert("Checkout error: " + err.message);
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
   const deleteMessage = async (msgId) => {
     await supabase.from("messages").delete().eq("id", msgId);
     setConvMessages(prev => prev.filter(m => m.id !== msgId));
@@ -4557,16 +4597,24 @@ export default function TutuTrade() {
                   </div>
                 ) : user ? (
                   <div style={{display:"flex",flexDirection:"column",gap:".5rem"}}>
-                    <button className="btn btn-primary" style={{width:"100%",padding:".72rem",fontSize:".92rem"}} onClick={()=>startConversation(selectedListing)}>
-                      ✉ Message seller to buy
+                    <button
+                      className="btn btn-primary"
+                      style={{width:"100%",padding:".78rem",fontSize:".95rem",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:".5rem"}}
+                      onClick={()=>startCheckout(selectedListing)}
+                      disabled={checkoutLoading}
+                    >
+                      {checkoutLoading ? "⏳ Opening checkout…" : `💳 Buy now — £${selectedListing.price}`}
                     </button>
-                    {(selectedListing.seller_paypal || selectedListing.seller_email) && (
-                      <div style={{padding:".75rem 1rem",background:P.card,border:`1px solid ${P.border}`,borderRadius:8,fontSize:".78rem",color:P.muted,lineHeight:1.5}}>
-                        <strong style={{color:P.text,display:"block",marginBottom:".25rem"}}>How to pay</strong>
-                        Agree the sale with the seller via messages, then send <strong style={{color:P.accent}}>£{selectedListing.price}</strong> to <strong style={{color:P.success}}>{selectedListing.seller_paypal || selectedListing.seller_email}</strong> via PayPal or bank transfer.
-                        The seller will mark the item as sold once payment is received.
-                      </div>
-                    )}
+                    <button
+                      className="btn btn-ghost"
+                      style={{width:"100%",padding:".6rem",fontSize:".83rem"}}
+                      onClick={()=>startConversation(selectedListing)}
+                    >
+                      ✉ Ask the seller a question
+                    </button>
+                    <div style={{fontSize:".72rem",color:P.muted,textAlign:"center",lineHeight:1.5}}>
+                      Secure card payment · Item auto-marked sold · Seller paid within 24hrs
+                    </div>
                   </div>
                 ) : (
                   <div style={{padding:"1rem",background:P.surface,border:`1px solid ${P.border}`,borderRadius:10,textAlign:"center"}}>
