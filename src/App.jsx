@@ -4586,7 +4586,7 @@ export default function TutuTrade() {
                     <span style={{fontSize:"1.15rem",fontWeight:700,color:P.success}}>£{selectedListing.price}</span>
                   </div>
                 )}
-                {(isOwner || isAdmin) ? (
+                {isOwner ? (
                   <div style={{display:"flex",flexDirection:"column",gap:".5rem"}}>
                     {!selectedListing.sold
                       ? <button className="btn btn-success" style={{width:"100%",padding:".72rem"}} onClick={()=>handleMarkSold(selectedListing.id)}>✓ Mark as sold</button>
