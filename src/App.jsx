@@ -4512,7 +4512,7 @@ export default function TutuTrade() {
       {modal === "detail" && selectedListing && (() => {
         const effectiveCommission = getCommission(selectedListing.school_id);
         const { commission } = calcFees(selectedListing.price, effectiveCommission);
-        const isOwner = user?.email === selectedListing.seller_email || isAdmin;
+        const isOwner = user?.email === selectedListing.seller_email;
         const sc = getSchoolColor(selectedListing.school_id);
         return (
           <div className="overlay" onClick={closeModal}>
@@ -4586,7 +4586,7 @@ export default function TutuTrade() {
                     <span style={{fontSize:"1.15rem",fontWeight:700,color:P.success}}>£{selectedListing.price}</span>
                   </div>
                 )}
-                {isOwner ? (
+                {(isOwner || isAdmin) ? (
                   <div style={{display:"flex",flexDirection:"column",gap:".5rem"}}>
                     {!selectedListing.sold
                       ? <button className="btn btn-success" style={{width:"100%",padding:".72rem"}} onClick={()=>handleMarkSold(selectedListing.id)}>✓ Mark as sold</button>
